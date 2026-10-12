@@ -1,0 +1,240 @@
+================================================================================
+COMPANY COURT MANAGEMENT SYSTEM (CCMS)
+OFFICIAL USER GUIDE & OPERATING MANUAL
+================================================================================
+
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. Introduction & Overview
+2. First Launch & Administrator Setup
+3. User Authentication, Session Lock & Logout
+4. Application Entry Workflow
+5. Donation Entry Workflow (Linking Applications)
+6. Donation Disbursement Workflow (Auto-Population & Status Management)
+7. Date Entry Standards (DD-MM-YYYY)
+8. Dashboard Analytics & Interpretation
+9. Global Search & Multi-Module Filtering
+10. Reports, Print Previews & File Exports (PDF, Excel, Word)
+11. Bulk CSV Ingestion & Conflict Resolution
+12. Database Backup, Restoration & Rollback Safety
+13. System Settings Configuration
+14. Security Invariants & Audit Trail Inspection
+15. Routine Maintenance & Troubleshooting
+
+
+1. INTRODUCTION & OVERVIEW
+--------------------------------------------------------------------------------
+The Company Court Management System (CCMS) is designed for bench officers, court 
+clerks, registrars, and review officers responsible for managing judicial company 
+court proceedings, registered corporate petitions, decreed court donations, and 
+subsequent disbursements to authorized recipients.
+
+The application works completely offline on local desktop workstations. All records 
+are persisted directly into a secure local SQLite database file named "ccms.db".
+
+
+2. FIRST LAUNCH & ADMINISTRATOR SETUP
+--------------------------------------------------------------------------------
+When CCMS is launched for the first time on a workstation:
+1. The Setup Wizard will automatically appear.
+2. Step 1 (Court Entity): Enter your official court authority name (e.g., 
+   "Company Court Administrative Wing"), address, telephone, email, and currency 
+   symbol (default: ৳). Click "Continue to Admin Setup".
+3. Step 2 (Initial Admin): Enter the desired username for the primary Super 
+   Administrator, full name, and a secure password (minimum 6 characters).
+4. Step 3 (Confirmation): Click "Initialize & Create Account". The local database 
+   schema will be constructed, default security roles established, and the Super 
+   Administrator registered.
+5. Click "Proceed to Login Screen" to begin work.
+
+
+3. USER AUTHENTICATION, SESSION LOCK & LOGOUT
+--------------------------------------------------------------------------------
+- Sign In: Enter your assigned username and password on the administrative portal.
+- Manual Lock Screen: Click the padlock icon in the upper-right header to instantly 
+  lock your workstation when stepping away. Enter your password to unlock.
+- Auto-Inactivity Lock: If no keyboard or mouse activity is detected for the period 
+  configured in Settings (default: 30 minutes), the screen locks automatically.
+- Logout: Click the red Logout icon in the upper-right header or bottom sidebar.
+
+
+4. APPLICATION ENTRY WORKFLOW
+--------------------------------------------------------------------------------
+The Application Entry module registers petition metadata for corporate entities 
+and respondents.
+
+Fields:
+1. Serial Number (Optional; click "Auto-Gen" to auto-increment, or type manually)
+2. Donation Name (The corporate entity or organization name)
+3. Address (Registered office or business address)
+4. Phone Number (e.g., 01711000000; leading zeros are strictly preserved)
+5. Bank Name (e.g., Sonali Bank PLC)
+6. Branch Name (e.g., Principal Branch)
+7. Bank Account Number (e.g., 0021487654321; leading zeros are strictly preserved)
+8. Routing Number (e.g., 200271458; leading zeros are strictly preserved)
+9. Application Date (Format: DD-MM-YYYY)
+10. Remarks (Procedural notations)
+
+Important Rules:
+- Every field is optional. You may save partial or blank forms.
+- If saving a completely empty record, a confirmation dialog will appear: 
+  "All fields are blank. Would you like to proceed with creating an empty record?" 
+  Click "Yes, Save Blank Record" to confirm.
+- The Donation Name provided here will automatically become selectable in the 
+  Donation Entry module.
+
+
+5. DONATION ENTRY WORKFLOW
+--------------------------------------------------------------------------------
+The Donation Entry module records court judgements decrees mandating donation 
+payments.
+
+Fields:
+1. Serial Number (Optional; auto-generated or manual)
+2. Case Number (e.g., CC-104/2026 or Company Matter 42/2025)
+3. Donation Name (Selected from Application records or entered manually)
+4. Donation Amount (Exact monetary decimal value, e.g., 250000.00)
+5. Judgement Date (Format: DD-MM-YYYY)
+6. Remarks
+
+How Linking Works:
+- By default, select the entity from the "Donation Name Selection" dropdown. 
+  This establishes an internal relational foreign key link to the Application record 
+  and displays the application's bank details and address.
+- If you need to enter a donation for an entity not in the application register, 
+  click "Enter Custom Unlinked Name". The record will be safely saved and tagged 
+  as "Unlinked".
+
+
+6. DONATION DISBURSEMENT WORKFLOW
+--------------------------------------------------------------------------------
+The Donation Disbursement module records the authorized release of decreed funds 
+to verified beneficiary receivers.
+
+Fields:
+1. Serial Number (Optional)
+2. Source Donation (Select an existing decreed donation from the dropdown)
+3. Case Number (Auto-populated from selected donation)
+4. Donation Entity Name (Auto-populated from selected donation)
+5. Donation Amount (Auto-populated; adjustable if partial disbursement)
+6. Receiver Name (Full legal name of the authorized recipient)
+7. Receiver Phone (e.g., 01819000000; leading zeros preserved)
+8. Receiving Date (Date the cheque or fund was delivered; DD-MM-YYYY)
+9. Judgement Date (Date of original decree; DD-MM-YYYY)
+10. Status (Select: 'New Entry', 'Received', 'Delivered', 'Problem', 'Hold')
+11. Remarks
+
+Status Guidelines:
+- 'New Entry': Disbursement authorization initiated.
+- 'Received': Cheque received at the registry desk.
+- 'Delivered': Cheque delivered to the recipient.
+- 'Problem': Administrative hold, authorization discrepancy, or dispute.
+- 'Hold': Court order stay on disbursements.
+
+
+7. DATE ENTRY STANDARDS (DD-MM-YYYY)
+--------------------------------------------------------------------------------
+- Format: Always enter dates as DD-MM-YYYY (e.g., 15-01-2026, 31-12-2026).
+- Calendar Popover: Click the calendar icon to select dates visually.
+- Validation: The system rejects non-existent dates such as 31-02-2026 or 
+  29-02-2025 (non-leap year).
+- Storage: Dates are stored internally as canonical ISO YYYY-MM-DD to prevent 
+  time-zone shifts, but are displayed everywhere as DD-MM-YYYY.
+
+
+8. DASHBOARD ANALYTICS & INTERPRETATION
+--------------------------------------------------------------------------------
+The Dashboard computes live metrics directly from your SQLite database:
+- Total Application Records: Count of registered petitions.
+- Total Donations Decreed: Sum of monetary values where an amount was entered.
+- Total Disbursements Delivered: Sum of monetary values disbursed.
+- Remaining Balance: Net calculation (Decreed Donations minus Disbursements).
+- Status Breakdown: Distribution across New Entry, Received, Delivered, Problem, Hold.
+- Incomplete Records Audit: Highlights records missing essential dates or figures.
+- Date Filtering: Click "Today", "This Month", "This Year", or "All Records" to 
+  filter analytics dynamically.
+
+
+9. GLOBAL SEARCH & MULTI-MODULE FILTERING
+--------------------------------------------------------------------------------
+Navigate to "Search & Filter" in the sidebar:
+- Search across all 3 modules simultaneously using keywords.
+- Refine by Module (Applications Only, Donations Only, Disbursements Only).
+- Filter by Case Number, Disbursement Status, Date Range, or Minimum/Maximum Amount.
+- Click "Edit" on any row in the search results to open that record directly.
+
+
+10. REPORTS, PRINT PREVIEWS & FILE EXPORTS
+--------------------------------------------------------------------------------
+Navigate to "Reports & Printing" in the sidebar:
+- Select from 14 comprehensive court registers on the left navigation panel.
+- Preview the report in the live authority letterhead preview.
+- Toggle between Portrait and Landscape layout.
+- Print Report: Click "Print Report" to open the system print dialog.
+- Export Formats:
+  - Excel (.xlsx): Click "Excel" to generate a genuine styled workbook.
+  - Word (.docx): Click "Word" to generate an authentic Microsoft Word document.
+  - PDF (.pdf): Click "PDF" to generate a formatted document with page numbers.
+
+
+11. BULK CSV INGESTION & CONFLICT RESOLUTION
+--------------------------------------------------------------------------------
+Navigate to "Import Data" in the sidebar:
+1. Click the template download buttons ("Application Template", "Donation Template", 
+   "Disbursement Template") to download official CSV files. The templates include a 
+   UTF-8 Byte Order Mark (BOM) ensuring Bengali Unicode text opens correctly.
+2. Fill your data in the template and select the CSV file under Step 3.
+3. Review the Pre-Import Verification table:
+   - Rows with validation issues (invalid dates or numbers) are flagged in red.
+   - Rows matching existing serial numbers are flagged as duplicates in amber.
+4. Choose your Conflict Policy:
+   - "Skip duplicates": Keeps existing records intact.
+   - "Update existing matched records": Overwrites matched records with CSV data.
+   - "Insert as separate records": Inserts the rows as additional entries.
+5. Click "Commit Import to Database". The entire batch is processed in a single 
+   atomic database transaction.
+
+
+12. DATABASE BACKUP, RESTORATION & ROLLBACK SAFETY
+--------------------------------------------------------------------------------
+Navigate to "Backup & Restore" in the sidebar:
+- Create Backup: Click "Download Complete Database Snapshot". CCMS creates an 
+  atomic binary snapshot of ccms.db along with a JSON metadata manifest.
+- Check Integrity: Click "Run PRAGMA Integrity Check" to verify database health.
+- Restore Database: Select an authentic .db SQLite file and click "Validate & 
+  Execute Database Restoration". CCMS automatically takes a safety snapshot 
+  first; if the uploaded file is corrupted, the system rolls back safely.
+
+
+13. SYSTEM SETTINGS CONFIGURATION
+--------------------------------------------------------------------------------
+Navigate to "Settings" in the sidebar:
+- Court Coordinates: Update organization name, subtitle, address, telephone, and email.
+- Regional & Currency: Adjust currency symbol (default: ৳), currency code (BDT), 
+  and decimal precision (0, 2, or 4 decimal places).
+- UI Preferences: Change table density between Comfortable and Compact.
+- Security Policies: Configure session inactivity timeout in minutes (set to 0 
+  to disable), duplicate detection warning policies, and blank-record prompts.
+- Click "Save Settings" in the upper-right corner to persist changes.
+
+
+14. SECURITY INVARIANTS & AUDIT TRAIL INSPECTION
+--------------------------------------------------------------------------------
+- User Management: Super Administrators can add new operators, assign roles, 
+  reset forgotten passwords, and toggle account activation.
+- Audit Log: Every login, record creation, modification, deletion, CSV import, 
+  and database backup is permanently recorded with user, action type, and timestamp.
+
+
+15. ROUTINE MAINTENANCE & TROUBLESHOOTING
+--------------------------------------------------------------------------------
+- Weekly Recommended Maintenance:
+  1. Navigate to "Backup & Restore" and download a weekly backup.
+  2. Click "Run PRAGMA Integrity Check" to ensure database health.
+  3. Review the "Incomplete Records Audit Report" to complete pending records.
+- For technical assistance or court procedural inquiries, refer to this guide 
+  or consult your designated System Administrator.
+
+================================================================================
+Company Court Management System · High Court Division Judicial Administration
+================================================================================

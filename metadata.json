@@ -1,0 +1,8 @@
+{
+  "name": "Company Court Management System (CCMS)",
+  "description": "Offline-first Windows desktop and workstation application for managing company court records, applications, donations, and disbursements.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
