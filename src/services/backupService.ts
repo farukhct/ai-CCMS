@@ -51,6 +51,7 @@ export const backupService = {
     const appCount = get<{ count: number }>('SELECT COUNT(*) as count FROM Applications')?.count || 0;
     const donCount = get<{ count: number }>('SELECT COUNT(*) as count FROM Donations')?.count || 0;
     const disCount = get<{ count: number }>('SELECT COUNT(*) as count FROM Disbursements')?.count || 0;
+    const poCount = get<{ count: number }>('SELECT COUNT(*) as count FROM PayOrders')?.count || 0;
     const auditCount = get<{ count: number }>('SELECT COUNT(*) as count FROM AuditLogs')?.count || 0;
 
     return {
@@ -62,6 +63,7 @@ export const backupService = {
         applications: appCount,
         donations: donCount,
         disbursements: disCount,
+        payOrders: poCount,
         auditLogs: auditCount
       }
     };

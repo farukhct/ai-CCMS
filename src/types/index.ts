@@ -95,6 +95,23 @@ export interface DisbursementRecord {
   updated_at: string;
 }
 
+export interface PayOrderRecord {
+  id: number;
+  serial_number: string;
+  donation_id?: number | null; // internal link to DonationRecord
+  case_number: string;
+  donation_name: string;
+  pay_order_number: string;
+  po_date: string; // ISO YYYY-MM-DD or empty
+  bank_name: string;
+  branch_name: string;
+  remarks: string;
+  is_unlinked: number; // 0 = linked to donation, 1 = unlinked / manual
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AuditLogRecord {
   id: number;
   timestamp: string; // ISO string
@@ -160,6 +177,7 @@ export interface DatabaseBackupManifest {
     applications: number;
     donations: number;
     disbursements: number;
+    payOrders: number;
     auditLogs: number;
   };
   checksum?: string;
@@ -170,6 +188,7 @@ export type ActiveNavTab =
   | 'applications'
   | 'donations'
   | 'disbursements'
+  | 'pay_orders'
   | 'all_records'
   | 'search'
   | 'reports'

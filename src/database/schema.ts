@@ -90,6 +90,25 @@ CREATE TABLE IF NOT EXISTS Disbursements (
   FOREIGN KEY (donation_id) REFERENCES Donations(id) ON DELETE SET NULL
 );
 
+-- Pay Orders Table
+CREATE TABLE IF NOT EXISTS PayOrders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  serial_number TEXT,
+  donation_id INTEGER,
+  case_number TEXT,
+  donation_name TEXT,
+  pay_order_number TEXT,
+  po_date TEXT, -- Stored as ISO YYYY-MM-DD or empty
+  bank_name TEXT,
+  branch_name TEXT,
+  remarks TEXT,
+  is_unlinked INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (donation_id) REFERENCES Donations(id) ON DELETE SET NULL
+);
+
 -- Audit Logs Table
 CREATE TABLE IF NOT EXISTS AuditLogs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,6 +152,9 @@ CREATE INDEX IF NOT EXISTS idx_donations_application_id ON Donations(application
 CREATE INDEX IF NOT EXISTS idx_disbursements_status ON Disbursements(status);
 CREATE INDEX IF NOT EXISTS idx_disbursements_receiver_name ON Disbursements(receiver_name);
 CREATE INDEX IF NOT EXISTS idx_disbursements_donation_id ON Disbursements(donation_id);
+CREATE INDEX IF NOT EXISTS idx_payorders_case_number ON PayOrders(case_number);
+CREATE INDEX IF NOT EXISTS idx_payorders_po_number ON PayOrders(pay_order_number);
+CREATE INDEX IF NOT EXISTS idx_payorders_donation_id ON PayOrders(donation_id);
 CREATE INDEX IF NOT EXISTS idx_auditlogs_timestamp ON AuditLogs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_auditlogs_action ON AuditLogs(action_type);
 `;

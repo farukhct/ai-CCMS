@@ -18,6 +18,7 @@ import { DashboardView } from './components/views/DashboardView';
 import { ApplicationEntryView } from './components/views/ApplicationEntryView';
 import { DonationEntryView } from './components/views/DonationEntryView';
 import { DisbursementEntryView } from './components/views/DisbursementEntryView';
+import { PayOrderEntryView } from './components/views/PayOrderEntryView';
 import { AllRecordsView } from './components/views/AllRecordsView';
 import { GlobalSearchView } from './components/views/GlobalSearchView';
 import { ReportsView } from './components/views/ReportsView';
@@ -31,6 +32,7 @@ import { HelpView } from './components/views/HelpView';
 import { ApplicationFormModal } from './components/forms/ApplicationFormModal';
 import { DonationFormModal } from './components/forms/DonationFormModal';
 import { DisbursementFormModal } from './components/forms/DisbursementFormModal';
+import { PayOrderFormModal } from './components/forms/PayOrderFormModal';
 import { Scale } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
@@ -43,6 +45,9 @@ const MainLayout: React.FC = () => {
     donationModalId,
     disbursementModalId,
     disbursementDonationId,
+    payOrderModalId,
+    payOrderDonationId,
+    payOrderInitialData,
     closeAllModals
   } = useApp();
 
@@ -84,6 +89,8 @@ const MainLayout: React.FC = () => {
         return <DonationEntryView />;
       case 'disbursements':
         return <DisbursementEntryView />;
+      case 'pay_orders':
+        return <PayOrderEntryView />;
       case 'all_records':
         return <AllRecordsView />;
       case 'search':
@@ -137,6 +144,14 @@ const MainLayout: React.FC = () => {
       <DisbursementFormModal
         recordId={disbursementModalId}
         initialDonationId={disbursementDonationId}
+        onClose={closeAllModals}
+        onSaved={closeAllModals}
+      />
+      <PayOrderFormModal
+        recordId={payOrderModalId}
+        initialDonationId={payOrderDonationId}
+        initialCaseNumber={payOrderInitialData?.caseNumber}
+        initialDonationName={payOrderInitialData?.donationName}
         onClose={closeAllModals}
         onSaved={closeAllModals}
       />

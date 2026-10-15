@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { donationRepo } from '../../database/repositories/donationRepo';
 import { applicationRepo } from '../../database/repositories/applicationRepo';
+import { payOrderRepo } from '../../database/repositories/payOrderRepo';
 import { auditRepo } from '../../database/repositories/auditRepo';
-import { DonationRecord, ApplicationRecord } from '../../types';
+import { DonationRecord, ApplicationRecord, PayOrderRecord } from '../../types';
 import { DatePicker } from '../common/DatePicker';
-import { X, Sparkles, AlertCircle, Building2, Link as LinkIcon, Unlink, Plus } from 'lucide-react';
+import { X, Sparkles, AlertCircle, Building2, Link as LinkIcon, Unlink, Plus, CreditCard, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Props {
   recordId: number | null | undefined;
@@ -14,7 +15,7 @@ interface Props {
 }
 
 export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved }) => {
-  const { currentUser, addToast, showConfirm, settings } = useApp();
+  const { currentUser, addToast, showConfirm, settings, openPayOrderModal } = useApp();
 
   const isEdit = typeof recordId === 'number';
 
@@ -26,6 +27,14 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
   const [donationAmount, setDonationAmount] = useState('');
   const [judgementDate, setJudgementDate] = useState(''); // Canonical YYYY-MM-DD
   const [remarks, setRemarks] = useState('');
+
+  // Pay Order Module fields (Integrated within Donation Entry)
+  const [showPayOrderSection, setShowPayOrderSection] = useState(false);
+  const [payOrderNumber, setPayOrderNumber] = useState('');
+  const [poDate, setPoDate] = useState('');
+  const [poBankName, setPoBankName] = useState('');
+  const [poBranchName, setPoBranchName] = useState('');
+  const [poRemarks, setPoRemarks] = useState('');
 
   // Dropdown options from Applications
   const [availableApplications, setAvailableApplications] = useState<ApplicationRecord[]>([]);
@@ -118,9 +127,15 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
     setRemarks('');
     setDuplicateWarning(null);
     setIsManualName(false);
+    setShowPayOrderSection(false);
+    setPayOrderNumber('');
+    setPoDate('');
+    setPoBankName('');
+    setPoBranchName('');
+    setPoRemarks('');
   };
 
-  const doSave = (addAnotherMode?: boolean) => {
+  const doSave = (addAnotherMode?: boolean, openPayOrderAfter?: boolean) => {
     try {
       const cleanAmount = donationAmount.trim() ? parseFloat(donationAmount.replace(/,/g, '')) : null;
 
@@ -137,17 +152,68 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
 
       const willKeepOpen = !isEdit && (addAnotherMode !== undefined ? addAnotherMode : keepOpen);
 
+      let savedDonationId: number;
+      let finalCase = payload.case_number || '';
+      let finalName = payload.donation_name || '';
+
       if (isEdit && recordId) {
         const updated = donationRepo.update(recordId, payload);
+        savedDonationId = updated.id;
+        finalCase = updated.case_number || '';
+        finalName = updated.donation_name || '';
         auditRepo.log('UPDATE_RECORD', 'Donations', updated.id, `Updated Donation #${updated.id} (Case: ${updated.case_number || 'N/A'})`, currentUser || undefined);
         addToast('Donation updated successfully.', 'success');
-        onSaved();
-        onClose();
       } else {
         const created = donationRepo.create(payload, currentUser?.username);
+        savedDonationId = created.id;
+        finalCase = created.case_number || '';
+        finalName = created.donation_name || '';
         auditRepo.log('CREATE_RECORD', 'Donations', created.id, `Created Donation #${created.id} (Case: ${created.case_number || 'N/A'})`, currentUser || undefined);
-        onSaved();
+      }
 
+      // If integrated Pay Order section has data, create linked Pay Order
+      if (showPayOrderSection && (payOrderNumber.trim() || poBankName.trim() || poDate.trim() || poBranchName.trim())) {
+        try {
+          const poPayload: Partial<PayOrderRecord> = {
+            serial_number: payOrderRepo.getNextSerialNumber(),
+            donation_id: savedDonationId,
+            case_number: finalCase,
+            donation_name: finalName,
+            pay_order_number: payOrderNumber.trim(),
+            po_date: poDate.trim(),
+            bank_name: poBankName.trim(),
+            branch_name: poBranchName.trim(),
+            remarks: poRemarks.trim(),
+            is_unlinked: 0
+          };
+          const poCreated = payOrderRepo.create(poPayload, currentUser?.username);
+          auditRepo.log(
+            'CREATE_RECORD',
+            'PayOrders',
+            poCreated.id,
+            `Created Pay Order #${poCreated.id} (PO: ${poCreated.pay_order_number || 'N/A'}, Case: ${finalCase}) linked from Donation #${savedDonationId}`,
+            currentUser || undefined
+          );
+          addToast(`Pay Order #${poCreated.pay_order_number || poCreated.id} saved for this donation.`, 'success');
+        } catch (poErr: any) {
+          addToast(`Donation saved, but error saving pay order: ${poErr.message}`, 'warning');
+        }
+      }
+
+      onSaved();
+
+      if (openPayOrderAfter) {
+        onClose();
+        openPayOrderModal(undefined, savedDonationId, {
+          caseNumber: finalCase,
+          donationName: finalName
+        });
+        return;
+      }
+
+      if (isEdit) {
+        onClose();
+      } else {
         if (willKeepOpen) {
           addToast('Donation created successfully! Ready for next entry.', 'success');
           resetForm();
@@ -161,7 +227,7 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
     }
   };
 
-  const handleSubmit = (e?: React.FormEvent, addAnotherMode?: boolean) => {
+  const handleSubmit = (e?: React.FormEvent, addAnotherMode?: boolean, openPayOrderAfter?: boolean) => {
     if (e) e.preventDefault();
 
     // Case Number is strictly required
@@ -180,19 +246,20 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
       !serialNumber.trim() &&
       !donationName.trim() &&
       !donationAmount.trim() &&
-      !remarks.trim();
+      !remarks.trim() &&
+      !payOrderNumber.trim();
 
     if (isCompletelyBlank && settings.requireConfirmBlank) {
       showConfirm({
         title: 'Save Blank Donation Record?',
         message: 'All optional fields other than Case Number and Judgement Date are blank in this donation record. Would you like to proceed?',
         confirmLabel: 'Save Donation Record',
-        onConfirm: () => doSave(addAnotherMode)
+        onConfirm: () => doSave(addAnotherMode, openPayOrderAfter)
       });
       return;
     }
 
-    doSave(addAnotherMode);
+    doSave(addAnotherMode, openPayOrderAfter);
   };
 
   if (recordId === undefined) return null;
@@ -210,12 +277,26 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
               Links to Application Entry or permits standalone unlinked records
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-300 hover:text-white p-1 rounded hover:bg-white/10 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                openPayOrderModal(undefined, recordId || undefined, { caseNumber, donationName });
+              }}
+              className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
+              title="Populate Case Number and Donation Name to new Pay Order"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>Create Pay Order</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="text-slate-300 hover:text-white p-1 rounded hover:bg-white/10 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -403,6 +484,111 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
             />
           </div>
 
+          {/* Integrated Pay Order Entry Section */}
+          <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/70 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-800 text-xs select-none">
+                <input
+                  type="checkbox"
+                  checked={showPayOrderSection}
+                  onChange={e => setShowPayOrderSection(e.target.checked)}
+                  className="rounded border-slate-300 text-emerald-700 focus:ring-emerald-700 w-4 h-4"
+                />
+                <span className="flex items-center gap-1.5 text-slate-800 font-bold">
+                  <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
+                  Add Pay Order with this Donation (Optional)
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  openPayOrderModal(undefined, recordId || undefined, { caseNumber, donationName });
+                }}
+                className="text-[11px] text-emerald-800 hover:text-emerald-950 font-medium underline flex items-center gap-1"
+                title="Open dedicated Pay Order Entry Form with populated Case & Donation Name"
+              >
+                Open Pay Order Form →
+              </button>
+            </div>
+
+            {showPayOrderSection && (
+              <div className="pt-2 border-t border-slate-200 space-y-3">
+                <div className="p-2 rounded bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-[11px] flex items-center justify-between">
+                  <span>
+                    Populated from Donation: <strong>Case:</strong> {caseNumber || '(Pending)'} · <strong>Entity:</strong> {donationName || '(Pending)'}
+                  </span>
+                  <span className="text-emerald-700 text-[10px] italic">
+                    PayOrderModule Fields
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Pay Order Number
+                    </label>
+                    <input
+                      type="text"
+                      value={payOrderNumber}
+                      onChange={e => setPayOrderNumber(e.target.value)}
+                      placeholder="e.g. PO-8492015"
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-teal-700"
+                    />
+                  </div>
+                  <div>
+                    <DatePicker
+                      label="PO Date"
+                      value={poDate}
+                      onChange={setPoDate}
+                      placeholder="dd-MM-yyyy"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Bank Name
+                    </label>
+                    <input
+                      type="text"
+                      value={poBankName}
+                      onChange={e => setPoBankName(e.target.value)}
+                      placeholder="e.g. Sonali Bank PLC"
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Branch Name
+                    </label>
+                    <input
+                      type="text"
+                      value={poBranchName}
+                      onChange={e => setPoBranchName(e.target.value)}
+                      placeholder="e.g. Supreme Court Branch"
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Pay Order Remarks
+                  </label>
+                  <input
+                    type="text"
+                    value={poRemarks}
+                    onChange={e => setPoRemarks(e.target.value)}
+                    placeholder="Clearance status, scroll reference, or registry notes"
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Actions */}
           <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex flex-col gap-1 w-full sm:w-auto">
@@ -422,13 +608,22 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
               )}
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium transition-colors"
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium transition-colors"
               >
                 Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit(undefined, false, true)}
+                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-medium transition-colors shadow-xs flex items-center gap-1.5 text-xs"
+                title="Save Donation and immediately open Pay Order entry form with populated Case & Entity"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>Save & Add Pay Order</span>
               </button>
               {!isEdit && (
                 <button

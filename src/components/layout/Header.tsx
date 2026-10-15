@@ -14,6 +14,7 @@ export const Header: React.FC = () => {
     openApplicationModal,
     openDonationModal,
     openDisbursementModal,
+    openPayOrderModal,
     hasPermission
   } = useApp();
 
@@ -65,6 +66,13 @@ export const Header: React.FC = () => {
             >
               <Plus className="w-3.5 h-3.5" />
               Disbursement
+            </button>
+            <button
+              onClick={() => openPayOrderModal()}
+              className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-medium flex items-center gap-1 transition-colors whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Pay Order
             </button>
           </div>
         )}

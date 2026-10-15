@@ -22,12 +22,13 @@ export const GlobalSearchView: React.FC = () => {
     hasPermission,
     openApplicationModal,
     openDonationModal,
-    openDisbursementModal
+    openDisbursementModal,
+    openPayOrderModal
   } = useApp();
 
   // Search filter criteria
   const [keyword, setKeyword] = useState('');
-  const [moduleFilter, setModuleFilter] = useState<'all' | 'applications' | 'donations' | 'disbursements'>('all');
+  const [moduleFilter, setModuleFilter] = useState<'all' | 'applications' | 'donations' | 'disbursements' | 'pay_orders'>('all');
   const [caseNumber, setCaseNumber] = useState('');
   const [status, setStatus] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -212,6 +213,57 @@ export const GlobalSearchView: React.FC = () => {
       });
     }
 
+    // 4. Query PayOrders if applicable
+    if (moduleFilter === 'all' || moduleFilter === 'pay_orders') {
+      let poSql = 'SELECT * FROM PayOrders WHERE 1=1';
+      let poParams: any[] = [];
+
+      if (term) {
+        poSql += ` AND (
+          LOWER(serial_number) LIKE ? OR
+          LOWER(case_number) LIKE ? OR
+          LOWER(donation_name) LIKE ? OR
+          LOWER(pay_order_number) LIKE ? OR
+          LOWER(bank_name) LIKE ? OR
+          LOWER(branch_name) LIKE ? OR
+          LOWER(remarks) LIKE ?
+        )`;
+        const p = `%${term}%`;
+        poParams.push(p, p, p, p, p, p, p);
+      }
+
+      if (caseNumber.trim()) {
+        poSql += ' AND LOWER(case_number) LIKE ?';
+        poParams.push(`%${caseNumber.trim().toLowerCase()}%`);
+      }
+
+      if (startDate) {
+        poSql += ' AND po_date >= ? AND po_date != ""';
+        poParams.push(startDate);
+      }
+      if (endDate) {
+        poSql += ' AND po_date <= ? AND po_date != ""';
+        poParams.push(endDate);
+      }
+
+      const poRows = query(poSql, poParams);
+      poRows.forEach((r: any) => {
+        list.push({
+          type: 'PayOrder',
+          id: r.id,
+          serial_number: r.serial_number,
+          case_number: r.case_number,
+          name: `${r.pay_order_number ? `PO: ${r.pay_order_number}` : 'Pay Order'} (${r.donation_name || 'No Entity'})`,
+          details: `${r.bank_name || ''} ${r.branch_name ? `(${r.branch_name})` : ''}`,
+          amount: null,
+          date: r.po_date,
+          status: 'Active',
+          remarks: r.remarks,
+          raw: r
+        });
+      });
+    }
+
     return list;
   }, [keyword, moduleFilter, caseNumber, status, startDate, endDate, minAmount, maxAmount]);
 
@@ -225,6 +277,7 @@ export const GlobalSearchView: React.FC = () => {
     if (row.type === 'Application') openApplicationModal(row.id);
     else if (row.type === 'Donation') openDonationModal(row.id);
     else if (row.type === 'Disbursement') openDisbursementModal(row.id);
+    else if (row.type === 'PayOrder') openPayOrderModal(row.id);
   };
 
   const handleResetFilters = () => {
@@ -335,6 +388,7 @@ export const GlobalSearchView: React.FC = () => {
               <option value="applications">Applications Only</option>
               <option value="donations">Donations Only</option>
               <option value="disbursements">Disbursements Only</option>
+              <option value="pay_orders">Pay Orders Only</option>
             </select>
           </div>
 

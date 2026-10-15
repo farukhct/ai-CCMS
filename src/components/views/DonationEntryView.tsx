@@ -17,13 +17,15 @@ import {
   X,
   Link as LinkIcon,
   Unlink,
-  Coins
+  Coins,
+  CreditCard
 } from 'lucide-react';
 
 export const DonationEntryView: React.FC = () => {
   const {
     openDonationModal,
     openDisbursementModal,
+    openPayOrderModal,
     showConfirm,
     addToast,
     hasPermission,
@@ -370,13 +372,22 @@ export const DonationEntryView: React.FC = () => {
                     <td className="py-2 px-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {hasPermission('create_records') && (
-                          <button
-                            onClick={() => openDisbursementModal(undefined, rec.id)}
-                            className="p-1 text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 rounded transition-colors"
-                            title="Create Disbursement for this Donation"
-                          >
-                            <Coins className="w-3.5 h-3.5" />
-                          </button>
+                          <>
+                            <button
+                              onClick={() => openPayOrderModal(undefined, rec.id)}
+                              className="p-1 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                              title="Create Pay Order for this Donation"
+                            >
+                              <CreditCard className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => openDisbursementModal(undefined, rec.id)}
+                              className="p-1 text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 rounded transition-colors"
+                              title="Create Disbursement for this Donation"
+                            >
+                              <Coins className="w-3.5 h-3.5" />
+                            </button>
+                          </>
                         )}
                         {hasPermission('edit_records') && (
                           <button

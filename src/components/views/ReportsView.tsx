@@ -49,7 +49,8 @@ export const ReportsView: React.FC = () => {
     { id: 11, name: '11. Daily / Monthly Financial Summary', desc: 'Periodic financial throughput aggregate.' },
     { id: 12, name: '12. Incomplete Records Audit Report', desc: 'Records requiring data completion (missing dates, amounts, or entities).' },
     { id: 13, name: '13. Custom-Filtered Dynamic Report', desc: 'Select bespoke columns and custom multi-field criteria.' },
-    { id: 14, name: '14. System Security & Audit Log Report', desc: 'Privileged audit trail of user access and record modifications.', perm: 'view_audit_logs' }
+    { id: 14, name: '14. System Security & Audit Log Report', desc: 'Privileged audit trail of user access and record modifications.', perm: 'view_audit_logs' },
+    { id: 15, name: '15. Pay Order Register', desc: 'Judicial bank pay order instruments with dates, case references, and issuing banks.' }
   ];
 
   // Compute Active Report Data & Columns
@@ -284,6 +285,30 @@ export const ReportsView: React.FC = () => {
         ...l,
         timestamp: formatTimestampDisplay(l.timestamp)
       }));
+    }
+    else if (selectedReportId === 15) {
+      title = 'Pay Order Register';
+      columns = [
+        { header: 'ID', key: 'id', width: 8, align: 'center' },
+        { header: 'Serial No', key: 'serial_number', width: 14 },
+        { header: 'Case Number', key: 'case_number', width: 16 },
+        { header: 'Donation Name', key: 'donation_name', width: 24 },
+        { header: 'Pay Order No', key: 'pay_order_number', width: 16 },
+        { header: 'PO Date', key: 'po_date', width: 16, align: 'center', isDate: true },
+        { header: 'Bank Name', key: 'bank_name', width: 20 },
+        { header: 'Branch Name', key: 'branch_name', width: 18 },
+        { header: 'Remarks', key: 'remarks', width: 20 }
+      ];
+
+      let sql = 'SELECT * FROM PayOrders WHERE 1=1';
+      let p: any[] = [];
+      if (caseFilter.trim()) { sql += ' AND case_number LIKE ?'; p.push(`%${caseFilter.trim()}%`); }
+      if (entityFilter.trim()) { sql += ' AND (donation_name LIKE ? OR bank_name LIKE ?)'; p.push(`%${entityFilter.trim()}%`, `%${entityFilter.trim()}%`); }
+      if (startDate) { sql += ' AND po_date >= ? AND po_date != ""'; p.push(startDate); }
+      if (endDate) { sql += ' AND po_date <= ? AND po_date != ""'; p.push(endDate); }
+      sql += ' ORDER BY id DESC';
+
+      rows = query(sql, p);
     }
 
     return { title, columns, rows, totalSum };

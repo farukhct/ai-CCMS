@@ -72,6 +72,22 @@ export interface DbState {
       created_at: string;
       updated_at: string;
     }>;
+    PayOrders: Array<{
+      id: number;
+      serial_number: string;
+      donation_id: number | null;
+      case_number: string;
+      donation_name: string;
+      pay_order_number: string;
+      po_date: string;
+      bank_name: string;
+      branch_name: string;
+      remarks: string;
+      is_unlinked: number;
+      created_by: string;
+      created_at: string;
+      updated_at: string;
+    }>;
     AuditLogs: Array<{
       id: number;
       timestamp: string;
@@ -119,6 +135,7 @@ function createEmptyState(): DbState {
       Applications: [],
       Donations: [],
       Disbursements: [],
+      PayOrders: [],
       AuditLogs: [],
       AppSettings: [],
       ImportJobs: []
@@ -129,6 +146,7 @@ function createEmptyState(): DbState {
       Applications: 0,
       Donations: 0,
       Disbursements: 0,
+      PayOrders: 0,
       AuditLogs: 0,
       AppSettings: 0,
       ImportJobs: 0
@@ -712,6 +730,12 @@ export function ensureState(): DbState {
   const loaded = loadStateFromStorage();
   if (loaded) {
     state = loaded;
+    if (!state.tables.PayOrders) {
+      state.tables.PayOrders = [];
+    }
+    if (state.sequences.PayOrders === undefined) {
+      state.sequences.PayOrders = state.tables.PayOrders.reduce((m, item) => Math.max(m, item.id), 0);
+    }
     if (!state.tables.Users || state.tables.Users.length === 0) {
       seedDefaultAdmin();
       saveStateToStorage();
@@ -814,11 +838,17 @@ export function deleteTablesData(
     deletedCounts['Donations'] = count;
     totalDeleted += count;
 
-    // Foreign key cleanup: If Disbursements is NOT cleared, unlink references
+    // Foreign key cleanup: If Disbursements or PayOrders is NOT cleared, unlink references
     if (!tablesToClear.has('Disbursements')) {
       s.tables.Disbursements.forEach(dis => {
         dis.donation_id = null;
         dis.is_unlinked = 1;
+      });
+    }
+    if (!tablesToClear.has('PayOrders')) {
+      s.tables.PayOrders.forEach(po => {
+        po.donation_id = null;
+        po.is_unlinked = 1;
       });
     }
   }
@@ -831,6 +861,17 @@ export function deleteTablesData(
       s.sequences.Disbursements = 0;
     }
     deletedCounts['Disbursements'] = count;
+    totalDeleted += count;
+  }
+
+  // 4. PayOrders
+  if (tablesToClear.has('PayOrders')) {
+    const count = s.tables.PayOrders.length;
+    s.tables.PayOrders = [];
+    if (options.resetSequences !== false) {
+      s.sequences.PayOrders = 0;
+    }
+    deletedCounts['PayOrders'] = count;
     totalDeleted += count;
   }
 
@@ -912,6 +953,14 @@ export function getDatabaseTableStats(): TableStatInfo[] {
       description: 'Cheque payments, distribution vouchers, receiver details, contact numbers, and delivery statuses.',
       category: 'judicial',
       count: s.tables.Disbursements.length,
+      dangerLevel: 'high'
+    },
+    {
+      name: 'PayOrders',
+      displayName: 'Pay Order Register',
+      description: 'Court-issued pay order instruments, pay order numbers, PO dates, bank & branch details, and case links.',
+      category: 'judicial',
+      count: s.tables.PayOrders.length,
       dangerLevel: 'high'
     },
     {
@@ -1178,6 +1227,31 @@ export function query<T = any>(sql: string, params: any[] = []): T[] {
 
     if (params.length > 0) {
       rows = filterDisbursementRows(rows, trimmed, params);
+    }
+
+    if (trimmed.includes('COUNT(*)')) {
+      return [{ c: rows.length, count: rows.length }] as T[];
+    }
+
+    applySortingAndPagination(rows, trimmed, params);
+    return rows as T[];
+  }
+
+  // 9. PayOrders Queries
+  if (trimmed.includes('FROM PayOrders')) {
+    if (trimmed.includes('SELECT MAX(id)')) {
+      const maxId = s.tables.PayOrders.reduce((m, item) => Math.max(m, item.id), 0);
+      return [{ maxId }] as T[];
+    }
+    if (trimmed.includes('WHERE id = ?')) {
+      const p = s.tables.PayOrders.find(item => item.id === Number(params[0]));
+      return (p ? [p] : []) as T[];
+    }
+
+    let rows = [...s.tables.PayOrders];
+
+    if (params.length > 0) {
+      rows = filterPayOrderRows(rows, trimmed, params);
     }
 
     if (trimmed.includes('COUNT(*)')) {
@@ -1478,6 +1552,75 @@ export function run(sql: string, params: any[] = []): { changes: number; lastIns
     s.tables.Disbursements = s.tables.Disbursements.filter(d => d.id !== id);
     saveStateToStorage();
     return { changes: initLen - s.tables.Disbursements.length, lastInsertRowid: id };
+  }
+
+  // 10. PayOrders INSERT
+  if (trimmed.startsWith('INSERT INTO PayOrders')) {
+    s.sequences.PayOrders++;
+    const id = s.sequences.PayOrders;
+    const [serial, donId, caseNum, donationName, poNumber, poDate, bankName, branchName, remarks, isUnlinked, createdBy] = params;
+
+    s.tables.PayOrders.push({
+      id,
+      serial_number: serial || '',
+      donation_id: donId !== undefined && donId !== null ? Number(donId) : null,
+      case_number: caseNum || '',
+      donation_name: donationName || '',
+      pay_order_number: poNumber || '',
+      po_date: poDate || '',
+      bank_name: bankName || '',
+      branch_name: branchName || '',
+      remarks: remarks || '',
+      is_unlinked: isUnlinked ? 1 : 0,
+      created_by: createdBy || 'System',
+      created_at: now,
+      updated_at: now
+    });
+
+    saveStateToStorage();
+    return { changes: 1, lastInsertRowid: id };
+  }
+
+  // 11. PayOrders UPDATE
+  if (trimmed.startsWith('UPDATE PayOrders SET')) {
+    const id = Number(params[params.length - 1]);
+    const index = s.tables.PayOrders.findIndex(p => p.id === id);
+    if (index >= 0) {
+      const [serial, donId, caseNum, donationName, poNumber, poDate, bankName, branchName, remarks, isUnlinked] = params;
+      s.tables.PayOrders[index] = {
+        ...s.tables.PayOrders[index],
+        serial_number: serial !== undefined ? serial : s.tables.PayOrders[index].serial_number,
+        donation_id: donId !== undefined ? (donId !== null ? Number(donId) : null) : s.tables.PayOrders[index].donation_id,
+        case_number: caseNum !== undefined ? caseNum : s.tables.PayOrders[index].case_number,
+        donation_name: donationName !== undefined ? donationName : s.tables.PayOrders[index].donation_name,
+        pay_order_number: poNumber !== undefined ? poNumber : s.tables.PayOrders[index].pay_order_number,
+        po_date: poDate !== undefined ? poDate : s.tables.PayOrders[index].po_date,
+        bank_name: bankName !== undefined ? bankName : s.tables.PayOrders[index].bank_name,
+        branch_name: branchName !== undefined ? branchName : s.tables.PayOrders[index].branch_name,
+        remarks: remarks !== undefined ? remarks : s.tables.PayOrders[index].remarks,
+        is_unlinked: isUnlinked !== undefined ? (isUnlinked ? 1 : 0) : s.tables.PayOrders[index].is_unlinked,
+        updated_at: now
+      };
+      saveStateToStorage();
+      return { changes: 1, lastInsertRowid: id };
+    }
+    return { changes: 0, lastInsertRowid: id };
+  }
+
+  // 12. PayOrders DELETE
+  if (trimmed === 'DELETE FROM PayOrders' || trimmed === 'DELETE FROM PayOrders;') {
+    const initLen = s.tables.PayOrders.length;
+    s.tables.PayOrders = [];
+    s.sequences.PayOrders = 0;
+    saveStateToStorage();
+    return { changes: initLen, lastInsertRowid: 0 };
+  }
+  if (trimmed.startsWith('DELETE FROM PayOrders WHERE id = ?')) {
+    const id = Number(params[0]);
+    const initLen = s.tables.PayOrders.length;
+    s.tables.PayOrders = s.tables.PayOrders.filter(p => p.id !== id);
+    saveStateToStorage();
+    return { changes: initLen - s.tables.PayOrders.length, lastInsertRowid: id };
   }
 
   // 10. Users INSERT
@@ -1854,6 +1997,68 @@ function filterDisbursementRows(rows: any[], sql: string, params: any[]) {
 
     if (sql.includes('donation_amount <= ?')) {
       if (d.donation_amount === null || d.donation_amount > Number(params[paramIndex])) ok = false;
+      paramIndex++;
+    }
+
+    return ok;
+  });
+}
+
+function filterPayOrderRows(rows: any[], sql: string, params: any[]) {
+  return rows.filter(po => {
+    let ok = true;
+    let paramIndex = 0;
+
+    if (sql.includes('serial_number LIKE ?')) {
+      const term = String(params[paramIndex] || '').replace(/%/g, '').toLowerCase();
+      paramIndex += 6;
+      const match =
+        (po.serial_number && po.serial_number.toLowerCase().includes(term)) ||
+        (po.case_number && po.case_number.toLowerCase().includes(term)) ||
+        (po.donation_name && po.donation_name.toLowerCase().includes(term)) ||
+        (po.pay_order_number && po.pay_order_number.toLowerCase().includes(term)) ||
+        (po.bank_name && po.bank_name.toLowerCase().includes(term)) ||
+        (po.branch_name && po.branch_name.toLowerCase().includes(term)) ||
+        (po.remarks && po.remarks.toLowerCase().includes(term));
+      if (!match) ok = false;
+    }
+
+    if (sql.includes('case_number = ?') || sql.includes('case_number LIKE ?')) {
+      const target = String(params[paramIndex] || '').replace(/%/g, '').toLowerCase();
+      if (!po.case_number || !po.case_number.toLowerCase().includes(target)) ok = false;
+      paramIndex++;
+    }
+
+    if (sql.includes('donation_name = ?') || sql.includes('donation_name LIKE ?')) {
+      const target = String(params[paramIndex] || '').replace(/%/g, '').toLowerCase();
+      if (!po.donation_name || !po.donation_name.toLowerCase().includes(target)) ok = false;
+      paramIndex++;
+    }
+
+    if (sql.includes('pay_order_number LIKE ?') || sql.includes('pay_order_number = ?')) {
+      const target = String(params[paramIndex] || '').replace(/%/g, '').toLowerCase();
+      if (!po.pay_order_number || !po.pay_order_number.toLowerCase().includes(target)) ok = false;
+      paramIndex++;
+    }
+
+    if (sql.includes('bank_name LIKE ?') || sql.includes('bank_name = ?')) {
+      const target = String(params[paramIndex] || '').replace(/%/g, '').toLowerCase();
+      if (!po.bank_name || !po.bank_name.toLowerCase().includes(target)) ok = false;
+      paramIndex++;
+    }
+
+    if (sql.includes('po_date >= ?')) {
+      if (!po.po_date || po.po_date < params[paramIndex]) ok = false;
+      paramIndex++;
+    }
+
+    if (sql.includes('po_date <= ?')) {
+      if (!po.po_date || po.po_date > params[paramIndex]) ok = false;
+      paramIndex++;
+    }
+
+    if (sql.includes('donation_id = ?')) {
+      if (po.donation_id !== Number(params[paramIndex])) ok = false;
       paramIndex++;
     }
 
