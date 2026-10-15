@@ -28,7 +28,8 @@ export const PayOrderEntryView: React.FC = () => {
     addToast,
     hasPermission,
     settings,
-    currentUser
+    currentUser,
+    dataVersion
   } = useApp();
 
   const [records, setRecords] = useState<PayOrderRecord[]>([]);
@@ -59,7 +60,7 @@ export const PayOrderEntryView: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, [loadData, dataVersion]);
 
   const handleDelete = (record: PayOrderRecord) => {
     if (!hasPermission('delete_records')) {

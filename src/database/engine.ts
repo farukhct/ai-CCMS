@@ -58,8 +58,13 @@ export interface DbState {
       id: number;
       serial_number: string;
       donation_id: number | null;
+      pay_order_id?: number | null;
       case_number: string;
       donation_name: string;
+      pay_order_number?: string;
+      po_date?: string;
+      bank_name?: string;
+      branch_name?: string;
       donation_amount: number | null;
       receiver_name: string;
       receiver_phone: string;
@@ -78,6 +83,8 @@ export interface DbState {
       donation_id: number | null;
       case_number: string;
       donation_name: string;
+      donation_amount?: number | null;
+      judgement_date?: string;
       pay_order_number: string;
       po_date: string;
       bank_name: string;
@@ -1485,14 +1492,31 @@ export function run(sql: string, params: any[] = []): { changes: number; lastIns
   if (trimmed.startsWith('INSERT INTO Disbursements')) {
     s.sequences.Disbursements++;
     const id = s.sequences.Disbursements;
-    const [serial, donId, caseNum, donationName, amount, receiverName, receiverPhone, recDate, judgeDate, status, remarks, isUnlinked, createdBy] = params;
+
+    let serial: string, donId: any, caseNum: string, donationName: string, amount: any, receiverName: string, receiverPhone: string, recDate: string, judgeDate: string, status: string, remarks: string, isUnlinked: any, createdBy: string;
+    let payOrderId: any = null;
+    let payOrderNumber: string = '';
+    let poDate: string = '';
+    let bankName: string = '';
+    let branchName: string = '';
+
+    if (params.length >= 18) {
+      [serial, donId, payOrderId, caseNum, donationName, payOrderNumber, poDate, bankName, branchName, amount, receiverName, receiverPhone, recDate, judgeDate, status, remarks, isUnlinked, createdBy] = params;
+    } else {
+      [serial, donId, caseNum, donationName, amount, receiverName, receiverPhone, recDate, judgeDate, status, remarks, isUnlinked, createdBy] = params;
+    }
 
     s.tables.Disbursements.push({
       id,
       serial_number: serial || '',
       donation_id: donId ?? null,
+      pay_order_id: payOrderId ?? null,
       case_number: caseNum || '',
       donation_name: donationName || '',
+      pay_order_number: payOrderNumber || '',
+      po_date: poDate || '',
+      bank_name: bankName || '',
+      branch_name: branchName || '',
       donation_amount: amount !== null && amount !== undefined ? Number(amount) : null,
       receiver_name: receiverName || '',
       receiver_phone: receiverPhone || '',
@@ -1515,13 +1539,30 @@ export function run(sql: string, params: any[] = []): { changes: number; lastIns
     const id = Number(params[params.length - 1]);
     const index = s.tables.Disbursements.findIndex(d => d.id === id);
     if (index >= 0) {
-      const [serial, donId, caseNum, donationName, amount, receiverName, receiverPhone, recDate, judgeDate, status, remarks, isUnlinked] = params;
+      let serial: any, donId: any, caseNum: any, donationName: any, amount: any, receiverName: any, receiverPhone: any, recDate: any, judgeDate: any, status: any, remarks: any, isUnlinked: any;
+      let payOrderId: any = undefined;
+      let payOrderNumber: any = undefined;
+      let poDate: any = undefined;
+      let bankName: any = undefined;
+      let branchName: any = undefined;
+
+      if (params.length >= 18) {
+        [serial, donId, payOrderId, caseNum, donationName, payOrderNumber, poDate, bankName, branchName, amount, receiverName, receiverPhone, recDate, judgeDate, status, remarks, isUnlinked] = params;
+      } else {
+        [serial, donId, caseNum, donationName, amount, receiverName, receiverPhone, recDate, judgeDate, status, remarks, isUnlinked] = params;
+      }
+
       s.tables.Disbursements[index] = {
         ...s.tables.Disbursements[index],
         serial_number: serial !== undefined ? serial : s.tables.Disbursements[index].serial_number,
         donation_id: donId !== undefined ? donId : s.tables.Disbursements[index].donation_id,
+        pay_order_id: payOrderId !== undefined ? payOrderId : s.tables.Disbursements[index].pay_order_id,
         case_number: caseNum !== undefined ? caseNum : s.tables.Disbursements[index].case_number,
         donation_name: donationName !== undefined ? donationName : s.tables.Disbursements[index].donation_name,
+        pay_order_number: payOrderNumber !== undefined ? payOrderNumber : s.tables.Disbursements[index].pay_order_number,
+        po_date: poDate !== undefined ? poDate : s.tables.Disbursements[index].po_date,
+        bank_name: bankName !== undefined ? bankName : s.tables.Disbursements[index].bank_name,
+        branch_name: branchName !== undefined ? branchName : s.tables.Disbursements[index].branch_name,
         donation_amount: amount !== undefined ? amount : s.tables.Disbursements[index].donation_amount,
         receiver_name: receiverName !== undefined ? receiverName : s.tables.Disbursements[index].receiver_name,
         receiver_phone: receiverPhone !== undefined ? receiverPhone : s.tables.Disbursements[index].receiver_phone,
@@ -1558,7 +1599,15 @@ export function run(sql: string, params: any[] = []): { changes: number; lastIns
   if (trimmed.startsWith('INSERT INTO PayOrders')) {
     s.sequences.PayOrders++;
     const id = s.sequences.PayOrders;
-    const [serial, donId, caseNum, donationName, poNumber, poDate, bankName, branchName, remarks, isUnlinked, createdBy] = params;
+    let serial: any, donId: any, caseNum: any, donationName: any, poNumber: any, poDate: any, bankName: any, branchName: any, remarks: any, isUnlinked: any, createdBy: any;
+    let donationAmount: any = null;
+    let judgementDate: any = '';
+
+    if (params.length >= 13) {
+      [serial, donId, caseNum, donationName, donationAmount, judgementDate, poNumber, poDate, bankName, branchName, remarks, isUnlinked, createdBy] = params;
+    } else {
+      [serial, donId, caseNum, donationName, poNumber, poDate, bankName, branchName, remarks, isUnlinked, createdBy] = params;
+    }
 
     s.tables.PayOrders.push({
       id,
@@ -1566,6 +1615,8 @@ export function run(sql: string, params: any[] = []): { changes: number; lastIns
       donation_id: donId !== undefined && donId !== null ? Number(donId) : null,
       case_number: caseNum || '',
       donation_name: donationName || '',
+      donation_amount: donationAmount !== null && donationAmount !== undefined && !isNaN(Number(donationAmount)) ? Number(donationAmount) : null,
+      judgement_date: judgementDate || '',
       pay_order_number: poNumber || '',
       po_date: poDate || '',
       bank_name: bankName || '',
@@ -1586,13 +1637,26 @@ export function run(sql: string, params: any[] = []): { changes: number; lastIns
     const id = Number(params[params.length - 1]);
     const index = s.tables.PayOrders.findIndex(p => p.id === id);
     if (index >= 0) {
-      const [serial, donId, caseNum, donationName, poNumber, poDate, bankName, branchName, remarks, isUnlinked] = params;
+      let serial: any, donId: any, caseNum: any, donationName: any, poNumber: any, poDate: any, bankName: any, branchName: any, remarks: any, isUnlinked: any;
+      let donationAmount: any = undefined;
+      let judgementDate: any = undefined;
+
+      if (params.length >= 12) {
+        [serial, donId, caseNum, donationName, donationAmount, judgementDate, poNumber, poDate, bankName, branchName, remarks, isUnlinked] = params;
+      } else {
+        [serial, donId, caseNum, donationName, poNumber, poDate, bankName, branchName, remarks, isUnlinked] = params;
+      }
+
       s.tables.PayOrders[index] = {
         ...s.tables.PayOrders[index],
         serial_number: serial !== undefined ? serial : s.tables.PayOrders[index].serial_number,
         donation_id: donId !== undefined ? (donId !== null ? Number(donId) : null) : s.tables.PayOrders[index].donation_id,
         case_number: caseNum !== undefined ? caseNum : s.tables.PayOrders[index].case_number,
         donation_name: donationName !== undefined ? donationName : s.tables.PayOrders[index].donation_name,
+        donation_amount: donationAmount !== undefined
+          ? (donationAmount !== null && !isNaN(Number(donationAmount)) ? Number(donationAmount) : null)
+          : s.tables.PayOrders[index].donation_amount,
+        judgement_date: judgementDate !== undefined ? judgementDate : s.tables.PayOrders[index].judgement_date,
         pay_order_number: poNumber !== undefined ? poNumber : s.tables.PayOrders[index].pay_order_number,
         po_date: poDate !== undefined ? poDate : s.tables.PayOrders[index].po_date,
         bank_name: bankName !== undefined ? bankName : s.tables.PayOrders[index].bank_name,

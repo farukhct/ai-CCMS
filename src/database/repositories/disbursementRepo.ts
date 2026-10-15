@@ -43,12 +43,15 @@ export const disbursementRepo = {
         serial_number LIKE ? OR
         case_number LIKE ? OR
         donation_name LIKE ? OR
+        pay_order_number LIKE ? OR
+        bank_name LIKE ? OR
+        branch_name LIKE ? OR
         receiver_name LIKE ? OR
         receiver_phone LIKE ? OR
         status LIKE ? OR
         remarks LIKE ?
       )`);
-      params.push(term, term, term, term, term, term, term);
+      params.push(term, term, term, term, term, term, term, term, term, term);
     }
 
     if (filters.caseNumber) {
@@ -178,8 +181,13 @@ export const disbursementRepo = {
     const now = new Date().toISOString();
     const serial = data.serial_number?.trim() || '';
     const donId = data.donation_id ?? null;
+    const poId = data.pay_order_id ?? null;
     const caseNum = data.case_number?.trim() || '';
     const donationName = data.donation_name?.trim() || '';
+    const poNum = data.pay_order_number?.trim() || '';
+    const poDate = data.po_date?.trim() || '';
+    const bankName = data.bank_name?.trim() || '';
+    const branchName = data.branch_name?.trim() || '';
     const amount = (data.donation_amount !== undefined && data.donation_amount !== null && !isNaN(Number(data.donation_amount)))
       ? Number(data.donation_amount)
       : null;
@@ -193,12 +201,14 @@ export const disbursementRepo = {
 
     const res = run(
       `INSERT INTO Disbursements (
-        serial_number, donation_id, case_number, donation_name, donation_amount,
+        serial_number, donation_id, pay_order_id, case_number, donation_name,
+        pay_order_number, po_date, bank_name, branch_name, donation_amount,
         receiver_name, receiver_phone, receiving_date, judgement_date, status,
         remarks, is_unlinked, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        serial, donId, caseNum, donationName, amount,
+        serial, donId, poId, caseNum, donationName,
+        poNum, poDate, bankName, branchName, amount,
         receiverName, receiverPhone, receivingDate, judgementDate, status,
         remarks, isUnlinked, username || 'System', now, now
       ]
@@ -218,15 +228,21 @@ export const disbursementRepo = {
 
     run(
       `UPDATE Disbursements SET
-        serial_number = ?, donation_id = ?, case_number = ?, donation_name = ?,
-        donation_amount = ?, receiver_name = ?, receiver_phone = ?, receiving_date = ?,
-        judgement_date = ?, status = ?, remarks = ?, is_unlinked = ?, updated_at = ?
+        serial_number = ?, donation_id = ?, pay_order_id = ?, case_number = ?, donation_name = ?,
+        pay_order_number = ?, po_date = ?, bank_name = ?, branch_name = ?, donation_amount = ?,
+        receiver_name = ?, receiver_phone = ?, receiving_date = ?, judgement_date = ?,
+        status = ?, remarks = ?, is_unlinked = ?, updated_at = ?
       WHERE id = ?`,
       [
         data.serial_number !== undefined ? data.serial_number.trim() : existing.serial_number,
         data.donation_id !== undefined ? data.donation_id : existing.donation_id,
+        data.pay_order_id !== undefined ? data.pay_order_id : existing.pay_order_id,
         data.case_number !== undefined ? data.case_number.trim() : existing.case_number,
         data.donation_name !== undefined ? data.donation_name.trim() : existing.donation_name,
+        data.pay_order_number !== undefined ? data.pay_order_number.trim() : existing.pay_order_number,
+        data.po_date !== undefined ? data.po_date.trim() : existing.po_date,
+        data.bank_name !== undefined ? data.bank_name.trim() : existing.bank_name,
+        data.branch_name !== undefined ? data.branch_name.trim() : existing.branch_name,
         amount,
         data.receiver_name !== undefined ? data.receiver_name.trim() : existing.receiver_name,
         data.receiver_phone !== undefined ? data.receiver_phone.trim() : existing.receiver_phone,

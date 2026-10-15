@@ -5,6 +5,7 @@ import { donationRepo } from '../../database/repositories/donationRepo';
 import { auditRepo } from '../../database/repositories/auditRepo';
 import { PayOrderRecord } from '../../types';
 import { DatePicker } from '../common/DatePicker';
+import { toDisplayDate } from '../../services/dateUtils';
 import { X, Sparkles, AlertCircle, Coins, Link as LinkIcon, Unlink, CheckCircle2, Plus } from 'lucide-react';
 
 interface Props {
@@ -12,6 +13,8 @@ interface Props {
   initialDonationId?: number | null;
   initialCaseNumber?: string;
   initialDonationName?: string;
+  initialDonationAmount?: string | number | null;
+  initialJudgementDate?: string;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -21,10 +24,12 @@ export const PayOrderFormModal: React.FC<Props> = ({
   initialDonationId,
   initialCaseNumber,
   initialDonationName,
+  initialDonationAmount,
+  initialJudgementDate,
   onClose,
   onSaved
 }) => {
-  const { currentUser, addToast, showConfirm, settings } = useApp();
+  const { currentUser, addToast, showConfirm, settings, openDisbursementModal } = useApp();
 
   const isEdit = typeof recordId === 'number';
 
@@ -32,6 +37,8 @@ export const PayOrderFormModal: React.FC<Props> = ({
   const [selectedDonationId, setSelectedDonationId] = useState<number | null>(null);
   const [caseNumber, setCaseNumber] = useState('');
   const [donationName, setDonationName] = useState('');
+  const [donationAmount, setDonationAmount] = useState('');
+  const [judgementDate, setJudgementDate] = useState('');
   const [payOrderNumber, setPayOrderNumber] = useState('');
   const [poDate, setPoDate] = useState(''); // Canonical YYYY-MM-DD
   const [bankName, setBankName] = useState('');
@@ -56,6 +63,8 @@ export const PayOrderFormModal: React.FC<Props> = ({
         setSelectedDonationId(existing.donation_id ?? null);
         setCaseNumber(existing.case_number || '');
         setDonationName(existing.donation_name || '');
+        setDonationAmount(existing.donation_amount !== null && existing.donation_amount !== undefined ? String(existing.donation_amount) : '');
+        setJudgementDate(existing.judgement_date || '');
         setPayOrderNumber(existing.pay_order_number || '');
         setPoDate(existing.po_date || '');
         setBankName(existing.bank_name || '');
@@ -77,13 +86,24 @@ export const PayOrderFormModal: React.FC<Props> = ({
       setBranchName('');
       setRemarks('');
 
-      if (initialCaseNumber || initialDonationName) {
+      if (initialCaseNumber || initialDonationName || initialDonationAmount !== undefined) {
         setCaseNumber(initialCaseNumber || '');
         setDonationName(initialDonationName || '');
+        setDonationAmount(initialDonationAmount !== null && initialDonationAmount !== undefined ? String(initialDonationAmount) : '');
+        setJudgementDate(initialJudgementDate || '');
+
         if (initialDonationId) {
           setSelectedDonationId(initialDonationId);
           const don = donationRepo.getById(initialDonationId);
-          if (don) setMatchedDonation(don);
+          if (don) {
+            setMatchedDonation(don);
+            if (!initialDonationAmount && don.donation_amount !== null && don.donation_amount !== undefined) {
+              setDonationAmount(String(don.donation_amount));
+            }
+            if (!initialJudgementDate && don.judgement_date) {
+              setJudgementDate(don.judgement_date);
+            }
+          }
         }
         setIsManualOverride(false);
         return;
@@ -96,6 +116,8 @@ export const PayOrderFormModal: React.FC<Props> = ({
           setMatchedDonation(don);
           setCaseNumber(don.case_number || '');
           setDonationName(don.donation_name || '');
+          setDonationAmount(don.donation_amount !== null && don.donation_amount !== undefined ? String(don.donation_amount) : '');
+          setJudgementDate(don.judgement_date || '');
           setIsManualOverride(false);
           return;
         }
@@ -104,10 +126,12 @@ export const PayOrderFormModal: React.FC<Props> = ({
       setSelectedDonationId(null);
       setCaseNumber('');
       setDonationName('');
+      setDonationAmount('');
+      setJudgementDate('');
       setMatchedDonation(null);
       setIsManualOverride(false);
     }
-  }, [recordId, isEdit, initialDonationId, initialCaseNumber, initialDonationName]);
+  }, [recordId, isEdit, initialDonationId, initialCaseNumber, initialDonationName, initialDonationAmount, initialJudgementDate]);
 
   // When user selects a donation record from dropdown
   const handleSelectDonation = (donIdStr: string) => {
@@ -124,6 +148,8 @@ export const PayOrderFormModal: React.FC<Props> = ({
       setMatchedDonation(don);
       setCaseNumber(don.case_number || '');
       setDonationName(don.donation_name || '');
+      setDonationAmount(don.donation_amount !== null && don.donation_amount !== undefined ? String(don.donation_amount) : '');
+      setJudgementDate(don.judgement_date || '');
       setIsManualOverride(false);
     }
   };
@@ -154,23 +180,33 @@ export const PayOrderFormModal: React.FC<Props> = ({
 
   const resetForm = () => {
     setSerialNumber(payOrderRepo.getNextSerialNumber());
+    setCaseNumber('');
+    setDonationName('');
+    setDonationAmount('');
+    setJudgementDate('');
+    setSelectedDonationId(null);
+    setMatchedDonation(null);
     setPayOrderNumber('');
     setPoDate('');
     setBankName('');
     setBranchName('');
     setRemarks('');
     setDuplicateWarning(null);
-    // Reload selectable donations
+    setIsManualOverride(false);
     setAvailableDonations(donationRepo.getSelectableDonations());
   };
 
-  const doSave = (addAnotherMode?: boolean) => {
+  const doSave = (addAnotherMode?: boolean, openDisbursementAfter?: boolean) => {
     try {
+      const cleanAmount = donationAmount.trim() ? parseFloat(donationAmount.replace(/,/g, '')) : null;
+
       const payload: Partial<PayOrderRecord> = {
         serial_number: serialNumber.trim(),
         donation_id: isManualOverride ? null : selectedDonationId,
         case_number: caseNumber.trim(),
         donation_name: donationName.trim(),
+        donation_amount: cleanAmount,
+        judgement_date: judgementDate.trim(),
         pay_order_number: payOrderNumber.trim(),
         po_date: poDate.trim(),
         bank_name: bankName.trim(),
@@ -179,7 +215,7 @@ export const PayOrderFormModal: React.FC<Props> = ({
         is_unlinked: isManualOverride || !selectedDonationId ? 1 : 0
       };
 
-      const willKeepOpen = !isEdit && (addAnotherMode !== undefined ? addAnotherMode : keepOpen);
+      const willKeepOpen = !isEdit && !openDisbursementAfter && (addAnotherMode !== undefined ? addAnotherMode : keepOpen);
 
       if (isEdit && recordId) {
         const updated = payOrderRepo.update(recordId, payload);
@@ -193,6 +229,20 @@ export const PayOrderFormModal: React.FC<Props> = ({
         addToast('Pay Order updated successfully.', 'success');
         onSaved();
         onClose();
+
+        if (openDisbursementAfter) {
+          openDisbursementModal(undefined, updated.donation_id || undefined, {
+            payOrderId: updated.id,
+            payOrderNumber: updated.pay_order_number,
+            poDate: updated.po_date,
+            bankName: updated.bank_name,
+            branchName: updated.branch_name,
+            caseNumber: updated.case_number,
+            donationName: updated.donation_name,
+            donationAmount: updated.donation_amount,
+            donationId: updated.donation_id
+          });
+        }
       } else {
         const created = payOrderRepo.create(payload, currentUser?.username);
         auditRepo.log(
@@ -204,7 +254,21 @@ export const PayOrderFormModal: React.FC<Props> = ({
         );
         onSaved();
 
-        if (willKeepOpen) {
+        if (openDisbursementAfter) {
+          addToast('Pay Order saved! Opening Disbursement entry form...', 'success');
+          onClose();
+          openDisbursementModal(undefined, created.donation_id || undefined, {
+            payOrderId: created.id,
+            payOrderNumber: created.pay_order_number,
+            poDate: created.po_date,
+            bankName: created.bank_name,
+            branchName: created.branch_name,
+            caseNumber: created.case_number,
+            donationName: created.donation_name,
+            donationAmount: created.donation_amount,
+            donationId: created.donation_id
+          });
+        } else if (willKeepOpen) {
           addToast('Pay Order created successfully! Ready for next entry.', 'success');
           resetForm();
         } else {
@@ -217,13 +281,14 @@ export const PayOrderFormModal: React.FC<Props> = ({
     }
   };
 
-  const handleSubmit = (e?: React.FormEvent, addAnotherMode?: boolean) => {
+  const handleSubmit = (e?: React.FormEvent, addAnotherMode?: boolean, openDisbursementAfter?: boolean) => {
     if (e) e.preventDefault();
 
     const isCompletelyBlank =
       !serialNumber.trim() &&
       !caseNumber.trim() &&
       !donationName.trim() &&
+      !donationAmount.trim() &&
       !payOrderNumber.trim() &&
       !poDate.trim() &&
       !bankName.trim() &&
@@ -235,12 +300,12 @@ export const PayOrderFormModal: React.FC<Props> = ({
         title: 'Save Blank Pay Order Record?',
         message: 'All fields in this pay order entry are blank. In accordance with CCMS rules, this will save an unpopulated pending record. Proceed?',
         confirmLabel: 'Save Blank Pay Order',
-        onConfirm: () => doSave(addAnotherMode)
+        onConfirm: () => doSave(addAnotherMode, openDisbursementAfter)
       });
       return;
     }
 
-    doSave(addAnotherMode);
+    doSave(addAnotherMode, openDisbursementAfter);
   };
 
   if (recordId === undefined) return null;
@@ -258,12 +323,35 @@ export const PayOrderFormModal: React.FC<Props> = ({
               Pay Order record linked to court-decreed Donation or standalone case instrument
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-300 hover:text-white p-1 rounded hover:bg-white/10 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                openDisbursementModal(undefined, selectedDonationId || undefined, {
+                  payOrderId: recordId || undefined,
+                  payOrderNumber,
+                  poDate,
+                  bankName,
+                  branchName,
+                  caseNumber,
+                  donationName,
+                  donationAmount,
+                  donationId: selectedDonationId
+                });
+              }}
+              className="text-[11px] bg-white/10 hover:bg-white/20 text-white px-2.5 py-1 rounded border border-white/20 transition-colors flex items-center gap-1 font-medium"
+              title="Open Disbursement Entry Form with populated Pay Order Details"
+            >
+              <span>Create Disbursement →</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="text-slate-300 hover:text-white p-1 rounded hover:bg-white/10 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -275,7 +363,7 @@ export const PayOrderFormModal: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Row 1: Serial & Auto-Gen */}
+          {/* Row 1: Serial & Case Number */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -315,7 +403,7 @@ export const PayOrderFormModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Row 2: Linked Donation Selector */}
+          {/* Row 2: Linked Donation Selector (Populate from Donation Entry Form) */}
           <div className="bg-slate-50 p-3.5 rounded border border-slate-200 space-y-2">
             <div className="flex items-center justify-between">
               <label className="font-semibold text-slate-800 flex items-center gap-1.5">
@@ -348,47 +436,85 @@ export const PayOrderFormModal: React.FC<Props> = ({
             </div>
 
             {!isManualOverride ? (
-              <div>
+              <div className="space-y-2">
                 <select
                   value={selectedDonationId || ''}
                   onChange={e => handleSelectDonation(e.target.value)}
                   className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
                 >
-                  <option value="">-- Select Decreed Donation to Populate Case & Entity --</option>
+                  <option value="">-- Select Decreed Donation to Populate Case, Entity & Amount --</option>
                   {availableDonations.map(don => (
                     <option key={don.id} value={don.id}>
                       Record #{don.id}: {don.case_number ? `Case ${don.case_number}` : 'No Case'} · {don.donation_name || 'No Name'} {don.donation_amount ? `(${settings.currencySymbol} ${Number(don.donation_amount).toLocaleString()})` : ''}
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Selecting a donation automatically populates Case Number and Donation Name.
+
+                {selectedDonationId && (
+                  <div className="p-2.5 bg-teal-50 border border-teal-200 rounded text-teal-900 text-[11px] flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-medium">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>
+                        Populated from Donation Record <strong>#{selectedDonationId}</strong> {caseNumber ? `(Case: ${caseNumber})` : ''}
+                      </span>
+                    </div>
+                    {donationAmount && (
+                      <span className="font-mono font-bold text-teal-800">
+                        {settings.currencySymbol} {parseFloat(donationAmount.replace(/,/g, '')).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <p className="text-[11px] text-slate-500">
+                  Selecting a donation automatically populates Case Number, Donation Name, and <strong>Donation Amount</strong>.
                 </p>
               </div>
             ) : (
               <div>
                 <p className="text-[11px] text-amber-700 italic">
-                  Manual mode active: You can specify custom Case Number and Donation Name directly without linking to an existing Donation record.
+                  Manual mode active: You can specify custom Case Number, Donation Name, and Amount directly without linking to an existing Donation record.
                 </p>
               </div>
             )}
           </div>
 
-          {/* Donation Name Field */}
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">
-              Donation Name / Company / Beneficiary Entity
-            </label>
-            <input
-              type="text"
-              value={donationName}
-              onChange={e => setDonationName(e.target.value)}
-              placeholder="e.g. Apex Textile Mills Ltd. or Anjuman Mufidul Islam"
-              className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
-            />
+          {/* Row 3: Donation Name & Inserted Field: Donation Amount */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Donation Name / Beneficiary Entity
+              </label>
+              <input
+                type="text"
+                value={donationName}
+                onChange={e => setDonationName(e.target.value)}
+                placeholder="e.g. Apex Textile Mills Ltd. or Anjuman Mufidul Islam"
+                className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
+              />
+            </div>
+
+            {/* Requested Inserted Field: Donation Amount */}
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Donation Amount ({settings.currencySymbol})
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={donationAmount}
+                onChange={e => setDonationAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-800 font-mono font-medium focus:outline-none focus:ring-1 focus:ring-teal-700"
+              />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                Auto-populates from Donation Entry Form ({settings.currencyCode})
+              </span>
+            </div>
           </div>
 
-          {/* Row 3: Pay Order Number & PO Date */}
+          {/* Row 4: Pay Order Number & PO Date */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
@@ -414,7 +540,7 @@ export const PayOrderFormModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Row 4: Bank Name & Branch Name */}
+          {/* Row 5: Bank Name & Branch Name */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
@@ -424,7 +550,7 @@ export const PayOrderFormModal: React.FC<Props> = ({
                 type="text"
                 value={bankName}
                 onChange={e => setBankName(e.target.value)}
-                placeholder="e.g. Sonali Bank PLC or Agrani Bank"
+                placeholder="e.g. Sonali Bank PLC"
                 className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
               />
             </div>
@@ -443,7 +569,7 @@ export const PayOrderFormModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Row 5: Remarks */}
+          {/* Row 6: Remarks */}
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
               Remarks
@@ -457,11 +583,11 @@ export const PayOrderFormModal: React.FC<Props> = ({
             />
           </div>
 
-          {/* Actions */}
+          {/* Continuous Entry Facilities & Actions */}
           <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex flex-col gap-1 w-full sm:w-auto">
               <span className="text-[11px] text-slate-500 italic">
-                All 8 fields optional.
+                All fields optional. Donation Amount populates from Donation Record.
               </span>
               {!isEdit && (
                 <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none font-medium hover:text-teal-800 transition-colors">
@@ -483,6 +609,15 @@ export const PayOrderFormModal: React.FC<Props> = ({
                 className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium transition-colors"
               >
                 Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit(undefined, false, true)}
+                className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded font-medium transition-colors shadow-xs flex items-center gap-1.5 text-xs"
+                title="Save Pay Order and immediately open Disbursement entry form with populated details"
+              >
+                <Coins className="w-3.5 h-3.5" />
+                <span>Save & Add Disbursement</span>
               </button>
               {!isEdit && (
                 <button

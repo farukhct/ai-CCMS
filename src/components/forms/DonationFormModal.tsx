@@ -124,6 +124,7 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
     setMatchedApp(null);
     setDonationName('');
     setDonationAmount('');
+    setJudgementDate('');
     setRemarks('');
     setDuplicateWarning(null);
     setIsManualName(false);
@@ -179,6 +180,8 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
             donation_id: savedDonationId,
             case_number: finalCase,
             donation_name: finalName,
+            donation_amount: cleanAmount,
+            judgement_date: judgementDate.trim(),
             pay_order_number: payOrderNumber.trim(),
             po_date: poDate.trim(),
             bank_name: poBankName.trim(),
@@ -206,7 +209,9 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
         onClose();
         openPayOrderModal(undefined, savedDonationId, {
           caseNumber: finalCase,
-          donationName: finalName
+          donationName: finalName,
+          donationAmount: cleanAmount !== null && cleanAmount !== undefined ? String(cleanAmount) : '',
+          judgementDate: judgementDate.trim()
         });
         return;
       }
@@ -282,10 +287,15 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
               type="button"
               onClick={() => {
                 onClose();
-                openPayOrderModal(undefined, recordId || undefined, { caseNumber, donationName });
+                openPayOrderModal(undefined, recordId || undefined, {
+                  caseNumber,
+                  donationName,
+                  donationAmount,
+                  judgementDate
+                });
               }}
               className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-medium flex items-center gap-1.5 transition-colors shadow-xs"
-              title="Populate Case Number and Donation Name to new Pay Order"
+              title="Populate Case Number, Donation Name, and Amount to new Pay Order"
             >
               <CreditCard className="w-3.5 h-3.5" />
               <span>Create Pay Order</span>
@@ -503,10 +513,15 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
                 type="button"
                 onClick={() => {
                   onClose();
-                  openPayOrderModal(undefined, recordId || undefined, { caseNumber, donationName });
+                  openPayOrderModal(undefined, recordId || undefined, {
+                    caseNumber,
+                    donationName,
+                    donationAmount,
+                    judgementDate
+                  });
                 }}
                 className="text-[11px] text-emerald-800 hover:text-emerald-950 font-medium underline flex items-center gap-1"
-                title="Open dedicated Pay Order Entry Form with populated Case & Donation Name"
+                title="Open dedicated Pay Order Entry Form with populated Case, Entity & Amount"
               >
                 Open Pay Order Form →
               </button>
@@ -516,7 +531,7 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
               <div className="pt-2 border-t border-slate-200 space-y-3">
                 <div className="p-2 rounded bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-[11px] flex items-center justify-between">
                   <span>
-                    Populated from Donation: <strong>Case:</strong> {caseNumber || '(Pending)'} · <strong>Entity:</strong> {donationName || '(Pending)'}
+                    Populated from Donation: <strong>Case:</strong> {caseNumber || '(Pending)'} · <strong>Entity:</strong> {donationName || '(Pending)'} · <strong>Amount:</strong> {donationAmount ? `${settings.currencySymbol} ${parseFloat(donationAmount.replace(/,/g, '')).toLocaleString()}` : '(Pending)'}
                   </span>
                   <span className="text-emerald-700 text-[10px] italic">
                     PayOrderModule Fields

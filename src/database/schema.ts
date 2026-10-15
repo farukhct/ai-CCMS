@@ -74,8 +74,13 @@ CREATE TABLE IF NOT EXISTS Disbursements (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   serial_number TEXT,
   donation_id INTEGER,
+  pay_order_id INTEGER,
   case_number TEXT,
   donation_name TEXT,
+  pay_order_number TEXT,
+  po_date TEXT,
+  bank_name TEXT,
+  branch_name TEXT,
   donation_amount REAL,
   receiver_name TEXT,
   receiver_phone TEXT,
@@ -87,7 +92,8 @@ CREATE TABLE IF NOT EXISTS Disbursements (
   created_by TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY (donation_id) REFERENCES Donations(id) ON DELETE SET NULL
+  FOREIGN KEY (donation_id) REFERENCES Donations(id) ON DELETE SET NULL,
+  FOREIGN KEY (pay_order_id) REFERENCES PayOrders(id) ON DELETE SET NULL
 );
 
 -- Pay Orders Table

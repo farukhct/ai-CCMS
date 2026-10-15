@@ -26,6 +26,25 @@ export interface ConfirmDialogOptions {
   onCancel?: () => void;
 }
 
+export interface InitialPayOrderData {
+  payOrderId?: number | null;
+  payOrderNumber?: string;
+  poDate?: string;
+  bankName?: string;
+  branchName?: string;
+  caseNumber?: string;
+  donationName?: string;
+  donationAmount?: number | string | null;
+  donationId?: number | null;
+}
+
+export interface InitialPayOrderModalData {
+  caseNumber?: string;
+  donationName?: string;
+  donationAmount?: number | string | null;
+  judgementDate?: string;
+}
+
 interface AppContextType {
   isInitialized: boolean;
   currentUser: User | null;
@@ -53,21 +72,25 @@ interface AppContextType {
   closeConfirm: () => void;
   openApplicationModal: (id?: number) => void;
   openDonationModal: (id?: number) => void;
-  openDisbursementModal: (id?: number, donationId?: number) => void;
-  openPayOrderModal: (id?: number, donationId?: number, initialData?: { caseNumber?: string; donationName?: string }) => void;
+  openDisbursementModal: (id?: number, donationId?: number, initialPayOrderData?: InitialPayOrderData) => void;
+  openPayOrderModal: (id?: number, donationId?: number, initialData?: InitialPayOrderModalData) => void;
   appModalId: number | null | undefined;
   donationModalId: number | null | undefined;
   disbursementModalId: number | null | undefined;
   disbursementDonationId: number | null | undefined;
+  disbursementPayOrderData: InitialPayOrderData | undefined;
   payOrderModalId: number | null | undefined;
   payOrderDonationId: number | null | undefined;
-  payOrderInitialData: { caseNumber?: string; donationName?: string } | undefined;
+  payOrderInitialData: InitialPayOrderModalData | undefined;
+  dataVersion: number;
+  refreshData: () => void;
   closeAllModals: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [dataVersion, setDataVersion] = useState(0);
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasUsers, setHasUsers] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -83,9 +106,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [donationModalId, setDonationModalId] = useState<number | null | undefined>(undefined);
   const [disbursementModalId, setDisbursementModalId] = useState<number | null | undefined>(undefined);
   const [disbursementDonationId, setDisbursementDonationId] = useState<number | null | undefined>(undefined);
+  const [disbursementPayOrderData, setDisbursementPayOrderData] = useState<InitialPayOrderData | undefined>(undefined);
   const [payOrderModalId, setPayOrderModalId] = useState<number | null | undefined>(undefined);
   const [payOrderDonationId, setPayOrderDonationId] = useState<number | null | undefined>(undefined);
-  const [payOrderInitialData, setPayOrderInitialData] = useState<{ caseNumber?: string; donationName?: string } | undefined>(undefined);
+  const [payOrderInitialData, setPayOrderInitialData] = useState<InitialPayOrderModalData | undefined>(undefined);
+
+  const refreshData = useCallback(() => {
+    setDataVersion(v => v + 1);
+  }, []);
 
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -256,12 +284,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDonationModalId(id ?? null);
   }, []);
 
-  const openDisbursementModal = useCallback((id?: number, donationId?: number) => {
+  const openDisbursementModal = useCallback((id?: number, donationId?: number, initialPayOrderData?: InitialPayOrderData) => {
     setDisbursementModalId(id ?? null);
     setDisbursementDonationId(donationId ?? null);
+    setDisbursementPayOrderData(initialPayOrderData);
   }, []);
 
-  const openPayOrderModal = useCallback((id?: number, donationId?: number, initialData?: { caseNumber?: string; donationName?: string }) => {
+  const openPayOrderModal = useCallback((id?: number, donationId?: number, initialData?: InitialPayOrderModalData) => {
     setPayOrderModalId(id ?? null);
     setPayOrderDonationId(donationId ?? null);
     setPayOrderInitialData(initialData);
@@ -272,6 +301,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDonationModalId(undefined);
     setDisbursementModalId(undefined);
     setDisbursementDonationId(undefined);
+    setDisbursementPayOrderData(undefined);
     setPayOrderModalId(undefined);
     setPayOrderDonationId(undefined);
     setPayOrderInitialData(undefined);
@@ -326,9 +356,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         donationModalId,
         disbursementModalId,
         disbursementDonationId,
+        disbursementPayOrderData,
         payOrderModalId,
         payOrderDonationId,
         payOrderInitialData,
+        dataVersion,
+        refreshData,
         closeAllModals
       }}
     >

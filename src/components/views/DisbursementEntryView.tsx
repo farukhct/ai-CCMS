@@ -25,7 +25,8 @@ export const DisbursementEntryView: React.FC = () => {
     addToast,
     hasPermission,
     settings,
-    currentUser
+    currentUser,
+    dataVersion
   } = useApp();
 
   const [records, setRecords] = useState<DisbursementRecord[]>([]);
@@ -54,7 +55,7 @@ export const DisbursementEntryView: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, [loadData, dataVersion]);
 
   const handleDelete = (record: DisbursementRecord) => {
     if (!hasPermission('delete_records')) {

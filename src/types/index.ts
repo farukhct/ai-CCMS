@@ -80,8 +80,13 @@ export interface DisbursementRecord {
   id: number;
   serial_number: string;
   donation_id?: number | null; // internal link to DonationRecord
+  pay_order_id?: number | null; // internal link to PayOrderRecord
   case_number: string;
   donation_name: string;
+  pay_order_number?: string; // Pay Order name / number
+  po_date?: string; // PO Date ISO YYYY-MM-DD or empty
+  bank_name?: string; // Bank Name
+  branch_name?: string; // Branch Name
   donation_amount: number | null;
   receiver_name: string;
   receiver_phone: string;
@@ -101,6 +106,8 @@ export interface PayOrderRecord {
   donation_id?: number | null; // internal link to DonationRecord
   case_number: string;
   donation_name: string;
+  donation_amount?: number | null; // auto-populated from Donation Entry Form
+  judgement_date?: string; // ISO YYYY-MM-DD or empty, auto-populated from Donation Entry Form
   pay_order_number: string;
   po_date: string; // ISO YYYY-MM-DD or empty
   bank_name: string;

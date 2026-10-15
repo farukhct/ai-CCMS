@@ -45,9 +45,11 @@ const MainLayout: React.FC = () => {
     donationModalId,
     disbursementModalId,
     disbursementDonationId,
+    disbursementPayOrderData,
     payOrderModalId,
     payOrderDonationId,
     payOrderInitialData,
+    refreshData,
     closeAllModals
   } = useApp();
 
@@ -134,26 +136,29 @@ const MainLayout: React.FC = () => {
       <ApplicationFormModal
         recordId={appModalId}
         onClose={closeAllModals}
-        onSaved={closeAllModals}
+        onSaved={refreshData}
       />
       <DonationFormModal
         recordId={donationModalId}
         onClose={closeAllModals}
-        onSaved={closeAllModals}
+        onSaved={refreshData}
       />
       <DisbursementFormModal
         recordId={disbursementModalId}
         initialDonationId={disbursementDonationId}
+        initialPayOrderData={disbursementPayOrderData}
         onClose={closeAllModals}
-        onSaved={closeAllModals}
+        onSaved={refreshData}
       />
       <PayOrderFormModal
         recordId={payOrderModalId}
         initialDonationId={payOrderDonationId}
         initialCaseNumber={payOrderInitialData?.caseNumber}
         initialDonationName={payOrderInitialData?.donationName}
+        initialDonationAmount={payOrderInitialData?.donationAmount}
+        initialJudgementDate={payOrderInitialData?.judgementDate}
         onClose={closeAllModals}
-        onSaved={closeAllModals}
+        onSaved={refreshData}
       />
 
       {/* System Overlay Controls */}

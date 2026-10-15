@@ -30,7 +30,8 @@ export const DonationEntryView: React.FC = () => {
     addToast,
     hasPermission,
     settings,
-    currentUser
+    currentUser,
+    dataVersion
   } = useApp();
 
   const [records, setRecords] = useState<DonationRecord[]>([]);
@@ -63,7 +64,7 @@ export const DonationEntryView: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, [loadData, dataVersion]);
 
   const handleDelete = (record: DonationRecord) => {
     if (!hasPermission('delete_records')) {

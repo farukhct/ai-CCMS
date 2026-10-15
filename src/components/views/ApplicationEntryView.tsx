@@ -26,7 +26,8 @@ export const ApplicationEntryView: React.FC = () => {
     addToast,
     hasPermission,
     settings,
-    currentUser
+    currentUser,
+    dataVersion
   } = useApp();
 
   const [records, setRecords] = useState<ApplicationRecord[]>([]);
@@ -59,7 +60,7 @@ export const ApplicationEntryView: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, [loadData, dataVersion]);
 
   const handleDelete = (record: ApplicationRecord) => {
     if (!hasPermission('delete_records')) {

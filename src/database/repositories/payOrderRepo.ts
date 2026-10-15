@@ -15,11 +15,13 @@ export interface PayOrderFilter {
   bankName?: string;
   startDate?: string;
   endDate?: string;
+  minAmount?: number;
+  maxAmount?: number;
   donationId?: number;
   isUnlinked?: number;
   page?: number;
   pageSize?: number;
-  sortBy?: 'id' | 'serial_number' | 'case_number' | 'donation_name' | 'pay_order_number' | 'po_date' | 'bank_name';
+  sortBy?: 'id' | 'serial_number' | 'case_number' | 'donation_name' | 'donation_amount' | 'judgement_date' | 'pay_order_number' | 'po_date' | 'bank_name';
   sortOrder?: 'ASC' | 'DESC';
 }
 
@@ -76,6 +78,16 @@ export const payOrderRepo = {
     if (filters.endDate) {
       whereClauses.push('po_date <= ? AND po_date != ""');
       params.push(filters.endDate);
+    }
+
+    if (filters.minAmount !== undefined && filters.minAmount !== null) {
+      whereClauses.push('donation_amount >= ?');
+      params.push(filters.minAmount);
+    }
+
+    if (filters.maxAmount !== undefined && filters.maxAmount !== null) {
+      whereClauses.push('donation_amount <= ?');
+      params.push(filters.maxAmount);
     }
 
     if (filters.donationId !== undefined && filters.donationId !== null) {
@@ -144,12 +156,38 @@ export const payOrderRepo = {
     return query<PayOrderRecord>(sql, params);
   },
 
+  getSelectablePayOrders(): PayOrderRecord[] {
+    return query<PayOrderRecord>(
+      'SELECT * FROM PayOrders ORDER BY id DESC'
+    );
+  },
+
+  getByDonationId(donationId: number): PayOrderRecord[] {
+    if (!donationId) return [];
+    return query<PayOrderRecord>(
+      'SELECT * FROM PayOrders WHERE donation_id = ? ORDER BY id DESC',
+      [donationId]
+    );
+  },
+
+  getByCaseNumber(caseNumber: string): PayOrderRecord[] {
+    if (!caseNumber || !caseNumber.trim()) return [];
+    return query<PayOrderRecord>(
+      'SELECT * FROM PayOrders WHERE case_number = ? ORDER BY id DESC',
+      [caseNumber.trim()]
+    );
+  },
+
   create(data: Partial<PayOrderRecord>, username?: string): PayOrderRecord {
     const now = new Date().toISOString();
     const serial = data.serial_number?.trim() || '';
     const donId = data.donation_id ?? null;
     const caseNum = data.case_number?.trim() || '';
     const donationName = data.donation_name?.trim() || '';
+    const amount = (data.donation_amount !== undefined && data.donation_amount !== null && !isNaN(Number(data.donation_amount)))
+      ? Number(data.donation_amount)
+      : null;
+    const judgeDate = data.judgement_date?.trim() || '';
     const poNumber = data.pay_order_number?.trim() || '';
     const poDate = data.po_date?.trim() || '';
     const bankName = data.bank_name?.trim() || '';
@@ -159,13 +197,13 @@ export const payOrderRepo = {
 
     const res = run(
       `INSERT INTO PayOrders (
-        serial_number, donation_id, case_number, donation_name, pay_order_number,
-        po_date, bank_name, branch_name, remarks, is_unlinked,
+        serial_number, donation_id, case_number, donation_name, donation_amount, judgement_date,
+        pay_order_number, po_date, bank_name, branch_name, remarks, is_unlinked,
         created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        serial, donId, caseNum, donationName, poNumber,
-        poDate, bankName, branchName, remarks, isUnlinked,
+        serial, donId, caseNum, donationName, amount, judgeDate,
+        poNumber, poDate, bankName, branchName, remarks, isUnlinked,
         username || 'System', now, now
       ]
     );
@@ -178,9 +216,14 @@ export const payOrderRepo = {
     const existing = this.getById(id);
     if (!existing) throw new Error(`Pay Order record #${id} not found`);
 
+    const amount = (data.donation_amount !== undefined && data.donation_amount !== null && !isNaN(Number(data.donation_amount)))
+      ? Number(data.donation_amount)
+      : (data.donation_amount === null ? null : existing.donation_amount);
+
     run(
       `UPDATE PayOrders SET
         serial_number = ?, donation_id = ?, case_number = ?, donation_name = ?,
+        donation_amount = ?, judgement_date = ?,
         pay_order_number = ?, po_date = ?, bank_name = ?, branch_name = ?,
         remarks = ?, is_unlinked = ?, updated_at = ?
       WHERE id = ?`,
@@ -189,6 +232,8 @@ export const payOrderRepo = {
         data.donation_id !== undefined ? data.donation_id : existing.donation_id,
         data.case_number !== undefined ? data.case_number.trim() : existing.case_number,
         data.donation_name !== undefined ? data.donation_name.trim() : existing.donation_name,
+        amount,
+        data.judgement_date !== undefined ? data.judgement_date.trim() : existing.judgement_date,
         data.pay_order_number !== undefined ? data.pay_order_number.trim() : existing.pay_order_number,
         data.po_date !== undefined ? data.po_date.trim() : existing.po_date,
         data.bank_name !== undefined ? data.bank_name.trim() : existing.bank_name,
