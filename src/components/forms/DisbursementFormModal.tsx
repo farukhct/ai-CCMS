@@ -12,8 +12,6 @@ import {
   Sparkles,
   AlertCircle,
   Coins,
-  Link as LinkIcon,
-  Unlink,
   CheckCircle2,
   Plus,
   CreditCard
@@ -51,6 +49,7 @@ export const DisbursementFormModal: React.FC<Props> = ({
   const [bankName, setBankName] = useState('');
   const [branchName, setBranchName] = useState('');
 
+  // Receiver & Date Fields
   const [receiverName, setReceiverName] = useState('');
   const [receiverPhone, setReceiverPhone] = useState('');
   const [receivingDate, setReceivingDate] = useState(''); // Canonical YYYY-MM-DD (Disbursement Date)
@@ -58,18 +57,13 @@ export const DisbursementFormModal: React.FC<Props> = ({
   const [status, setStatus] = useState<DisbursementStatus>('New Entry');
   const [remarks, setRemarks] = useState('');
 
-  const [availableDonations, setAvailableDonations] = useState<any[]>([]);
-  const [matchedDonation, setMatchedDonation] = useState<any | null>(null);
   const [availablePayOrders, setAvailablePayOrders] = useState<PayOrderRecord[]>([]);
   const [matchedPayOrder, setMatchedPayOrder] = useState<PayOrderRecord | null>(null);
-  const [isManualOverride, setIsManualOverride] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [keepOpen, setKeepOpen] = useState(false);
 
   useEffect(() => {
-    // Load selectable donations and pay orders
-    const donationList = donationRepo.getSelectableDonations();
-    setAvailableDonations(donationList);
+    // Load selectable Pay Orders
     const poList = payOrderRepo.getSelectablePayOrders();
     setAvailablePayOrders(poList);
 
@@ -92,12 +86,7 @@ export const DisbursementFormModal: React.FC<Props> = ({
         setJudgementDate(existing.judgement_date || '');
         setStatus(existing.status || 'New Entry');
         setRemarks(existing.remarks || '');
-        setIsManualOverride(existing.is_unlinked === 1);
 
-        if (existing.donation_id) {
-          const don = donationRepo.getById(existing.donation_id);
-          setMatchedDonation(don);
-        }
         if (existing.pay_order_id) {
           const po = payOrderRepo.getById(existing.pay_order_id);
           setMatchedPayOrder(po);
@@ -118,67 +107,92 @@ export const DisbursementFormModal: React.FC<Props> = ({
         if (initialPayOrderData.payOrderId) {
           setSelectedPayOrderId(initialPayOrderData.payOrderId);
           const po = payOrderRepo.getById(initialPayOrderData.payOrderId);
-          if (po) setMatchedPayOrder(po);
+          if (po) {
+            setMatchedPayOrder(po);
+            if (!initialPayOrderData.caseNumber && po.case_number) setCaseNumber(po.case_number);
+            if (!initialPayOrderData.donationName && po.donation_name) setDonationName(po.donation_name);
+            if ((initialPayOrderData.donationAmount === undefined || initialPayOrderData.donationAmount === null || initialPayOrderData.donationAmount === '') && po.donation_amount !== null && po.donation_amount !== undefined) {
+              setDonationAmount(String(po.donation_amount));
+            }
+            if (!initialPayOrderData.payOrderNumber && po.pay_order_number) setPayOrderNumber(po.pay_order_number);
+            if (!initialPayOrderData.poDate && po.po_date) setPoDate(po.po_date);
+            if (!initialPayOrderData.bankName && po.bank_name) setBankName(po.bank_name);
+            if (!initialPayOrderData.branchName && po.branch_name) setBranchName(po.branch_name);
+            if (!initialPayOrderData.judgementDate && po.judgement_date) setJudgementDate(po.judgement_date);
+          }
+        }
+
+        // Populate all 8 fields directly from initialPayOrderData:
+        setCaseNumber(initialPayOrderData.caseNumber || '');
+        setDonationName(initialPayOrderData.donationName || '');
+        if (initialPayOrderData.donationAmount !== undefined && initialPayOrderData.donationAmount !== null && initialPayOrderData.donationAmount !== '') {
+          setDonationAmount(String(initialPayOrderData.donationAmount));
+        } else if (!initialPayOrderData.payOrderId) {
+          setDonationAmount('');
         }
         setPayOrderNumber(initialPayOrderData.payOrderNumber || '');
         setPoDate(initialPayOrderData.poDate || '');
         setBankName(initialPayOrderData.bankName || '');
         setBranchName(initialPayOrderData.branchName || '');
-        setCaseNumber(initialPayOrderData.caseNumber || '');
-        setDonationName(initialPayOrderData.donationName || '');
+        if (initialPayOrderData.judgementDate) {
+          setJudgementDate(initialPayOrderData.judgementDate);
+        }
 
         if (initialPayOrderData.donationId) {
           setSelectedDonationId(initialPayOrderData.donationId);
           const don = donationRepo.getById(initialPayOrderData.donationId);
           if (don) {
-            setMatchedDonation(don);
             if (!initialPayOrderData.caseNumber && don.case_number) setCaseNumber(don.case_number);
             if (!initialPayOrderData.donationName && don.donation_name) setDonationName(don.donation_name);
-            if (don.donation_amount !== null && don.donation_amount !== undefined) setDonationAmount(String(don.donation_amount));
-            if (don.judgement_date) setJudgementDate(don.judgement_date);
+            if ((initialPayOrderData.donationAmount === undefined || initialPayOrderData.donationAmount === null || initialPayOrderData.donationAmount === '') && don.donation_amount !== null && don.donation_amount !== undefined) {
+              setDonationAmount(String(don.donation_amount));
+            }
+            if (!initialPayOrderData.judgementDate && don.judgement_date) setJudgementDate(don.judgement_date);
           }
         }
-        setIsManualOverride(false);
         return;
       }
 
-      // 2. If opened with initialDonationId
+      // 2. If opened with initialDonationId (auto-checks if donation has a linked pay order)
       if (initialDonationId) {
-        const don = donationRepo.getById(initialDonationId);
-        if (don) {
-          setSelectedDonationId(don.id);
-          setMatchedDonation(don);
-          setCaseNumber(don.case_number || '');
-          setDonationName(don.donation_name || '');
-          setDonationAmount(don.donation_amount !== null && don.donation_amount !== undefined ? String(don.donation_amount) : '');
-          setJudgementDate(don.judgement_date || '');
-          setIsManualOverride(false);
-
-          // Auto-check if this donation has a linked pay order
-          const linkedPOs = payOrderRepo.getByDonationId(don.id);
-          if (linkedPOs.length > 0) {
-            const firstPo = linkedPOs[0];
-            setSelectedPayOrderId(firstPo.id);
-            setMatchedPayOrder(firstPo);
-            setPayOrderNumber(firstPo.pay_order_number || '');
-            setPoDate(firstPo.po_date || '');
-            setBankName(firstPo.bank_name || '');
-            setBranchName(firstPo.branch_name || '');
-          } else {
-            setSelectedPayOrderId(null);
-            setMatchedPayOrder(null);
-            setPayOrderNumber('');
-            setPoDate('');
-            setBankName('');
-            setBranchName('');
+        setSelectedDonationId(initialDonationId);
+        const linkedPOs = payOrderRepo.getByDonationId(initialDonationId);
+        if (linkedPOs.length > 0) {
+          const firstPo = linkedPOs[0];
+          setSelectedPayOrderId(firstPo.id);
+          setMatchedPayOrder(firstPo);
+          setCaseNumber(firstPo.case_number || '');
+          setDonationName(firstPo.donation_name || '');
+          if (firstPo.donation_amount !== null && firstPo.donation_amount !== undefined) {
+            setDonationAmount(String(firstPo.donation_amount));
           }
-          return;
+          setPayOrderNumber(firstPo.pay_order_number || '');
+          setPoDate(firstPo.po_date || '');
+          setBankName(firstPo.bank_name || '');
+          setBranchName(firstPo.branch_name || '');
+          if (firstPo.judgement_date) {
+            setJudgementDate(firstPo.judgement_date);
+          }
+        } else {
+          const don = donationRepo.getById(initialDonationId);
+          if (don) {
+            setCaseNumber(don.case_number || '');
+            setDonationName(don.donation_name || '');
+            setDonationAmount(don.donation_amount !== null && don.donation_amount !== undefined ? String(don.donation_amount) : '');
+            setJudgementDate(don.judgement_date || '');
+          }
+          setSelectedPayOrderId(null);
+          setMatchedPayOrder(null);
+          setPayOrderNumber('');
+          setPoDate('');
+          setBankName('');
+          setBranchName('');
         }
+        return;
       }
 
       // 3. Clean fresh blank form
       setSelectedDonationId(null);
-      setMatchedDonation(null);
       setSelectedPayOrderId(null);
       setMatchedPayOrder(null);
       setCaseNumber('');
@@ -189,55 +203,11 @@ export const DisbursementFormModal: React.FC<Props> = ({
       setBankName('');
       setBranchName('');
       setJudgementDate('');
-      setIsManualOverride(false);
     }
   }, [recordId, isEdit, initialDonationId, initialPayOrderData]);
 
-  // When user selects a donation record from dropdown
-  const handleSelectDonation = (donIdStr: string) => {
-    if (!donIdStr) {
-      setSelectedDonationId(null);
-      setMatchedDonation(null);
-      return;
-    }
-
-    const id = parseInt(donIdStr, 10);
-    setSelectedDonationId(id);
-    const don = donationRepo.getById(id);
-    if (don) {
-      setMatchedDonation(don);
-      setCaseNumber(don.case_number || '');
-      setDonationName(don.donation_name || '');
-      setDonationAmount(don.donation_amount !== null && don.donation_amount !== undefined ? String(don.donation_amount) : '');
-      setJudgementDate(don.judgement_date || '');
-      setIsManualOverride(false);
-
-      // Auto-lookup Pay Order linked to this donation or case number
-      const linkedPos = payOrderRepo.getByDonationId(don.id);
-      if (linkedPos.length > 0) {
-        const firstPo = linkedPos[0];
-        setSelectedPayOrderId(firstPo.id);
-        setMatchedPayOrder(firstPo);
-        setPayOrderNumber(firstPo.pay_order_number || '');
-        setPoDate(firstPo.po_date || '');
-        setBankName(firstPo.bank_name || '');
-        setBranchName(firstPo.branch_name || '');
-      } else if (don.case_number) {
-        const casePos = payOrderRepo.getByCaseNumber(don.case_number);
-        if (casePos.length > 0) {
-          const firstPo = casePos[0];
-          setSelectedPayOrderId(firstPo.id);
-          setMatchedPayOrder(firstPo);
-          setPayOrderNumber(firstPo.pay_order_number || '');
-          setPoDate(firstPo.po_date || '');
-          setBankName(firstPo.bank_name || '');
-          setBranchName(firstPo.branch_name || '');
-        }
-      }
-    }
-  };
-
-  // When user selects a pay order from dropdown
+  // When user selects a pay order from dropdown:
+  // All fields [Case Number, Donation Entry Name, Amount, Pay Order Number, PO Date, Bank Name, Branch Name, Judgement Date] populate
   const handleSelectPayOrder = (poIdStr: string) => {
     if (!poIdStr) {
       setSelectedPayOrderId(null);
@@ -250,31 +220,38 @@ export const DisbursementFormModal: React.FC<Props> = ({
     const po = payOrderRepo.getById(id);
     if (po) {
       setMatchedPayOrder(po);
+      // 1. Case Number
+      if (po.case_number) setCaseNumber(po.case_number);
+      // 2. Donation Entry Name
+      if (po.donation_name) setDonationName(po.donation_name);
+      // 3. Amount
+      if (po.donation_amount !== null && po.donation_amount !== undefined) {
+        setDonationAmount(String(po.donation_amount));
+      }
+      // 4. Pay Order Number
       setPayOrderNumber(po.pay_order_number || '');
+      // 5. PO Date
       setPoDate(po.po_date || '');
+      // 6. Bank Name
       setBankName(po.bank_name || '');
+      // 7. Branch Name
       setBranchName(po.branch_name || '');
-
-      // Auto-populate caseNumber and donationName if not set or override
-      if (po.case_number && (!caseNumber || !selectedDonationId)) {
-        setCaseNumber(po.case_number);
-      }
-      if (po.donation_name && (!donationName || !selectedDonationId)) {
-        setDonationName(po.donation_name);
+      // 8. Judgement Date
+      if (po.judgement_date) {
+        setJudgementDate(po.judgement_date);
       }
 
-      // If linked to a donation, link to that donation too
-      if (po.donation_id && !selectedDonationId) {
+      // Link donation_id in the background if present on this Pay Order
+      if (po.donation_id) {
         setSelectedDonationId(po.donation_id);
         const don = donationRepo.getById(po.donation_id);
         if (don) {
-          setMatchedDonation(don);
-          if (don.case_number) setCaseNumber(don.case_number);
-          if (don.donation_name) setDonationName(don.donation_name);
-          if (don.donation_amount !== null && don.donation_amount !== undefined) {
+          if (!po.case_number && don.case_number) setCaseNumber(don.case_number);
+          if (!po.donation_name && don.donation_name) setDonationName(don.donation_name);
+          if ((po.donation_amount === null || po.donation_amount === undefined) && don.donation_amount !== null && don.donation_amount !== undefined) {
             setDonationAmount(String(don.donation_amount));
           }
-          if (don.judgement_date) {
+          if (!po.judgement_date && don.judgement_date) {
             setJudgementDate(don.judgement_date);
           }
         }
@@ -303,7 +280,6 @@ export const DisbursementFormModal: React.FC<Props> = ({
   const resetForm = () => {
     setSerialNumber(disbursementRepo.getNextSerialNumber());
     setSelectedDonationId(null);
-    setMatchedDonation(null);
     setSelectedPayOrderId(null);
     setMatchedPayOrder(null);
     setCaseNumber('');
@@ -319,19 +295,30 @@ export const DisbursementFormModal: React.FC<Props> = ({
     setJudgementDate('');
     setStatus('New Entry');
     setRemarks('');
-    setIsManualOverride(false);
     setDuplicateWarning(null);
-    setAvailableDonations(donationRepo.getSelectableDonations());
     setAvailablePayOrders(payOrderRepo.getSelectablePayOrders());
   };
 
   const doSave = (addAnotherMode?: boolean) => {
     try {
+      // Strict Check: Judgement Date must be strictly less than Disbursement Date before inserting data into database
+      if (judgementDate.trim() && receivingDate.trim()) {
+        const cJudg = toCanonicalDate(judgementDate);
+        const cDisb = toCanonicalDate(receivingDate);
+        if (cJudg && cDisb && cJudg >= cDisb) {
+          addToast(
+            `Validation Error: Judgement Date (${toDisplayDate(cJudg)}) must be less than Disbursement Date (${toDisplayDate(cDisb)}). Record cannot be inserted into the database.`,
+            'error'
+          );
+          return;
+        }
+      }
+
       const cleanAmount = donationAmount.trim() ? parseFloat(donationAmount.replace(/,/g, '')) : null;
 
       const payload: Partial<DisbursementRecord> = {
         serial_number: serialNumber.trim(),
-        donation_id: isManualOverride ? null : selectedDonationId,
+        donation_id: selectedDonationId || matchedPayOrder?.donation_id || null,
         pay_order_id: selectedPayOrderId,
         case_number: caseNumber.trim(),
         donation_name: donationName.trim(),
@@ -346,7 +333,7 @@ export const DisbursementFormModal: React.FC<Props> = ({
         judgement_date: judgementDate.trim(),
         status: status,
         remarks: remarks.trim(),
-        is_unlinked: isManualOverride || !selectedDonationId ? 1 : 0
+        is_unlinked: selectedPayOrderId ? 0 : (!selectedDonationId ? 1 : 0)
       };
 
       const willKeepOpen = !isEdit && (addAnotherMode !== undefined ? addAnotherMode : keepOpen);
@@ -369,7 +356,7 @@ export const DisbursementFormModal: React.FC<Props> = ({
           'CREATE_RECORD',
           'Disbursements',
           created.id,
-          `Created Disbursement #${created.id} (Status: ${created.status}, PO: ${created.pay_order_number || 'N/A'})`,
+          `Created Disbursement #${created.id} (Receiver: ${created.receiver_name}, Amount: ${created.donation_amount || 0}, Status: ${created.status})`,
           currentUser || undefined
         );
         onSaved();
@@ -408,13 +395,23 @@ export const DisbursementFormModal: React.FC<Props> = ({
       }
     }
 
-    // Validation 2: Disbursement Date must be strictly less than Judgement Date
-    if (receivingDate.trim() && judgementDate.trim()) {
-      const cDisb = toCanonicalDate(receivingDate);
+    // Validation 2: Judgement Date must be strictly less than Disbursement Date before inserting data into database
+    if (judgementDate.trim() && receivingDate.trim()) {
       const cJudg = toCanonicalDate(judgementDate);
-      if (cDisb && cJudg && cDisb >= cJudg) {
+      const cDisb = toCanonicalDate(receivingDate);
+
+      if (!cJudg) {
+        addToast('Invalid Judgement Date format. Please enter a valid date (dd-MM-yyyy).', 'error');
+        return;
+      }
+      if (!cDisb) {
+        addToast('Invalid Disbursement Date format. Please enter a valid date (dd-MM-yyyy).', 'error');
+        return;
+      }
+
+      if (cJudg >= cDisb) {
         addToast(
-          `Disbursement Date (${toDisplayDate(cDisb)}) must be less than Judgement Date (${toDisplayDate(cJudg)}).`,
+          `Validation Error: Judgement Date (${toDisplayDate(cJudg)}) must be less than Disbursement Date (${toDisplayDate(cDisb)}). Record cannot be inserted into the database.`,
           'error'
         );
         return;
@@ -461,7 +458,7 @@ export const DisbursementFormModal: React.FC<Props> = ({
               {isEdit ? `Edit Disbursement Entry #${recordId}` : 'New Donation Disbursement'}
             </h2>
             <p className="text-[11px] text-slate-300">
-              Auto-populates from Pay Order & Donation records while allowing independent overrides
+              Populates directly from Pay Order instruments and judicial decrees
             </p>
           </div>
           <button
@@ -524,124 +521,23 @@ export const DisbursementFormModal: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Section 2: Source Donation Population Box */}
-          <div className="bg-slate-50 p-3.5 rounded border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="font-semibold text-slate-800 flex items-center gap-1.5">
-                <Coins className="w-4 h-4 text-[#0f3a5d]" />
-                Select Source Donation Record
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsManualOverride(!isManualOverride);
-                  if (!isManualOverride) {
-                    setSelectedDonationId(null);
-                    setMatchedDonation(null);
-                  }
-                }}
-                className="text-[11px] text-teal-800 hover:underline flex items-center gap-1"
-              >
-                {isManualOverride ? (
-                  <>
-                    <LinkIcon className="w-3 h-3" />
-                    Link to Registered Donation
-                  </>
-                ) : (
-                  <>
-                    <Unlink className="w-3 h-3" />
-                    Enter Standalone Values
-                  </>
-                )}
-              </button>
-            </div>
-
-            {!isManualOverride && (
-              <div className="space-y-2">
-                <select
-                  value={selectedDonationId || ''}
-                  onChange={e => handleSelectDonation(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
-                >
-                  <option value="">-- Select from Existing Donations --</option>
-                  {availableDonations.map(don => (
-                    <option key={don.id} value={don.id}>
-                      Record #{don.id}: {don.case_number ? `Case ${don.case_number}` : 'No Case'} · {don.donation_name || 'No Name'} {don.donation_amount ? `(${settings.currencySymbol} ${Number(don.donation_amount).toLocaleString()})` : ''}
-                    </option>
-                  ))}
-                </select>
-
-                {selectedDonationId && (
-                  <div className="p-2.5 bg-teal-50 border border-teal-200 rounded text-teal-900 text-[11px] flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-medium">
-                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                      <span>Populated from Donation Record <strong>#{selectedDonationId}</strong> {caseNumber ? `(Case: ${caseNumber})` : ''}</span>
-                    </div>
-                    <span className="font-mono font-semibold text-teal-800">
-                      {donationAmount ? `${settings.currencySymbol} ${parseFloat(donationAmount).toLocaleString()}` : ''}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Populated / Editable Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Case Number
-                </label>
-                <input
-                  type="text"
-                  value={caseNumber}
-                  onChange={e => setCaseNumber(e.target.value)}
-                  placeholder="e.g. CC-104/2026"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-teal-700"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Donation Entity Name
-                </label>
-                <input
-                  type="text"
-                  value={donationName}
-                  onChange={e => setDonationName(e.target.value)}
-                  placeholder="Entity name"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Amount ({settings.currencySymbol})
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={donationAmount}
-                  onChange={e => setDonationAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-teal-700"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: Pay Order Details (Auto-populates from Pay Order) */}
+          {/* Section 2: Pay Order Details (Primary Source Instrument) */}
           <div className="bg-indigo-50/60 p-3.5 rounded border border-indigo-200 space-y-3">
             <div className="flex items-center justify-between">
               <label className="font-semibold text-slate-800 flex items-center gap-1.5">
                 <CreditCard className="w-4 h-4 text-indigo-700" />
-                Pay Order Details (Auto-populates from Pay Order)
+                Pay Order Details (Primary Source Instrument)
               </label>
               <button
                 type="button"
                 onClick={() => {
                   onClose();
-                  openPayOrderModal(undefined, selectedDonationId || undefined, { caseNumber, donationName });
+                  openPayOrderModal(undefined, selectedDonationId || undefined, {
+                    caseNumber,
+                    donationName,
+                    donationAmount,
+                    judgementDate
+                  });
                 }}
                 className="text-[11px] text-indigo-800 hover:text-indigo-950 font-medium underline flex items-center gap-1"
                 title="Open Pay Order Entry Form to register or edit a Pay Order"
@@ -650,39 +546,51 @@ export const DisbursementFormModal: React.FC<Props> = ({
               </button>
             </div>
 
-            {/* Pay Order Selector */}
+            {/* Pay Order Selector Dropdown */}
             <div className="space-y-2">
               <select
                 value={selectedPayOrderId || ''}
                 onChange={e => handleSelectPayOrder(e.target.value)}
                 className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700 text-xs"
               >
-                <option value="">-- Select from Existing Pay Orders (Auto-fills Details) --</option>
+                <option value="">-- Select from Existing Pay Orders (Auto-fills All 8 Fields) --</option>
                 {availablePayOrders.map(po => (
                   <option key={po.id} value={po.id}>
-                    PO #{po.id}: {po.pay_order_number ? `PO-${po.pay_order_number}` : 'No Number'} · Case {po.case_number || 'N/A'} · {po.bank_name || 'Bank Unspecified'} {po.branch_name ? `(${po.branch_name})` : ''} {po.po_date ? `[${toDisplayDate(po.po_date)}]` : ''}
+                    PO #{po.id}: {po.pay_order_number ? `PO-${po.pay_order_number}` : 'No Number'} · Case {po.case_number || 'N/A'} · {po.donation_name || 'No Entity'} {po.donation_amount ? `(${settings.currencySymbol} ${Number(po.donation_amount).toLocaleString()})` : ''} · {po.bank_name || 'Bank Unspecified'} {po.branch_name ? `(${po.branch_name})` : ''} {po.po_date ? `[PO Date: ${toDisplayDate(po.po_date)}]` : ''} {po.judgement_date ? `[Decree: ${toDisplayDate(po.judgement_date)}]` : ''}
                   </option>
                 ))}
               </select>
 
               {(selectedPayOrderId || payOrderNumber) && (
-                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded text-emerald-900 text-[11px] flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-medium">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>
-                      Populated from Pay Order: <strong>{payOrderNumber || '(No Number)'}</strong> · Bank: {bankName || 'N/A'} · Branch: {branchName || 'N/A'}
-                    </span>
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-emerald-950 text-[11px] space-y-1.5">
+                  <div className="flex items-center justify-between font-semibold text-emerald-900">
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        All Fields Populated from Pay Order {selectedPayOrderId ? `#${selectedPayOrderId}` : ''}: <strong>{payOrderNumber || '(No Number)'}</strong>
+                      </span>
+                    </div>
+                    {donationAmount && (
+                      <span className="font-mono font-bold text-emerald-800">
+                        {settings.currencySymbol} {parseFloat(donationAmount.replace(/,/g, '')).toLocaleString()}
+                      </span>
+                    )}
                   </div>
-                  {poDate && (
-                    <span className="font-mono text-emerald-800 font-semibold">
-                      PO Date: {toDisplayDate(poDate)}
-                    </span>
-                  )}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-2 gap-y-1 text-[10px] text-emerald-800 pt-1 border-t border-emerald-200/60 font-mono">
+                    <div><span className="text-emerald-600 font-semibold">Case No:</span> {caseNumber || '-'}</div>
+                    <div><span className="text-emerald-600 font-semibold">Entity:</span> {donationName || '-'}</div>
+                    <div><span className="text-emerald-600 font-semibold">PO Number:</span> {payOrderNumber || '-'}</div>
+                    <div><span className="text-emerald-600 font-semibold">PO Date:</span> {poDate ? toDisplayDate(poDate) : '-'}</div>
+                    <div><span className="text-emerald-600 font-semibold">Bank:</span> {bankName || '-'}</div>
+                    <div><span className="text-emerald-600 font-semibold">Branch:</span> {branchName || '-'}</div>
+                    <div><span className="text-emerald-600 font-semibold">Amount:</span> {donationAmount ? `${settings.currencySymbol} ${Number(donationAmount).toLocaleString()}` : '-'}</div>
+                    <div><span className="text-emerald-600 font-semibold">Decree Date:</span> {judgementDate ? toDisplayDate(judgementDate) : '-'}</div>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* 4 Requested Fields: Pay Order Name, PO Date, Bank Name, Branch Name */}
+            {/* 4 Pay Order Instrument Fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="block font-medium text-slate-700 mb-1">
@@ -736,6 +644,57 @@ export const DisbursementFormModal: React.FC<Props> = ({
             </div>
           </div>
 
+          {/* Section 3: Decreed Case & Donation Details (Populated from Pay Order) */}
+          <div className="bg-slate-50 p-3.5 rounded border border-slate-200 space-y-3">
+            <label className="font-semibold text-slate-800 flex items-center gap-1.5">
+              <Coins className="w-4 h-4 text-[#0f3a5d]" />
+              Decreed Case & Donation Details (Populated from Pay Order)
+            </label>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">
+                  Case Number
+                </label>
+                <input
+                  type="text"
+                  value={caseNumber}
+                  onChange={e => setCaseNumber(e.target.value)}
+                  placeholder="e.g. CC-104/2026"
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-teal-700"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">
+                  Donation Entity Name
+                </label>
+                <input
+                  type="text"
+                  value={donationName}
+                  onChange={e => setDonationName(e.target.value)}
+                  placeholder="Entity name"
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">
+                  Amount ({settings.currencySymbol})
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={donationAmount}
+                  onChange={e => setDonationAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 font-mono focus:outline-none focus:ring-1 focus:ring-teal-700"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Section 4: Receiver Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -781,7 +740,7 @@ export const DisbursementFormModal: React.FC<Props> = ({
                 placeholder="dd-MM-yyyy"
               />
               <span className="text-[10px] text-slate-400 mt-0.5 block">
-                Must be less than Judgement Date
+                Must be greater than Judgement Date
               </span>
             </div>
 
@@ -793,20 +752,20 @@ export const DisbursementFormModal: React.FC<Props> = ({
                 placeholder="dd-MM-yyyy"
               />
               <span className="text-[10px] text-slate-400 mt-0.5 block">
-                Populated from donation decree or entered
+                Must be less than Disbursement Date
               </span>
             </div>
-          </div>
 
-          {/* Inline alert if Disbursement Date is not less than Judgement Date */}
-          {receivingDate.trim() && judgementDate.trim() && toCanonicalDate(receivingDate) >= toCanonicalDate(judgementDate) && (
-            <div className="p-2.5 rounded bg-rose-50 border border-rose-300 text-rose-800 text-[11px] flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-              <span>
-                <strong>Date Rule Conflict:</strong> Disbursement Date ({toDisplayDate(receivingDate)}) must be strictly less than Judgement Date ({toDisplayDate(judgementDate)}).
-              </span>
-            </div>
-          )}
+            {/* Real-time date sequence warning */}
+            {receivingDate.trim() && judgementDate.trim() && toCanonicalDate(judgementDate) && toCanonicalDate(receivingDate) && toCanonicalDate(judgementDate) >= toCanonicalDate(receivingDate) && (
+              <div className="col-span-1 md:col-span-2 p-2.5 rounded bg-rose-50 border border-rose-300 text-rose-800 text-[11px] flex items-center gap-2 font-medium animate-in fade-in duration-200">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>
+                  Validation Error: Judgement Date ({toDisplayDate(judgementDate)}) must be less than Disbursement Date ({toDisplayDate(receivingDate)}). Record will not be inserted into the database.
+                </span>
+              </div>
+            )}
+          </div>
 
           {/* Section 6: Remarks */}
           <div>
@@ -817,7 +776,7 @@ export const DisbursementFormModal: React.FC<Props> = ({
               rows={2}
               value={remarks}
               onChange={e => setRemarks(e.target.value)}
-              placeholder="Delivery receipts, cheque details, witness notes"
+              placeholder="Court verification notes, check delivery receipt reference"
               className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
             />
           </div>
@@ -826,7 +785,7 @@ export const DisbursementFormModal: React.FC<Props> = ({
           <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex flex-col gap-1 w-full sm:w-auto">
               <span className="text-[11px] text-slate-500 italic">
-                All fields optional. Receiver phone requires 11 numeric digits if provided.
+                All fields optional. Blank saves generate pending records.
               </span>
               {!isEdit && (
                 <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none font-medium hover:text-teal-800 transition-colors">
@@ -841,28 +800,27 @@ export const DisbursementFormModal: React.FC<Props> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium transition-colors"
-              >
-                Cancel
-              </button>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
               {!isEdit && (
                 <button
                   type="button"
                   onClick={() => handleSubmit(undefined, true)}
-                  className="px-3.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded font-medium transition-colors shadow-xs flex items-center gap-1.5"
-                  title="Save and keep form open to enter another disbursement"
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-medium transition-colors flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Save & Add Another
                 </button>
               )}
               <button
+                type="button"
+                onClick={onClose}
+                className="px-3.5 py-1.5 border border-slate-300 text-slate-700 rounded text-xs font-medium hover:bg-slate-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#0f3a5d] hover:bg-[#164a75] text-white rounded font-semibold transition-colors shadow-xs"
+                className="px-4 py-1.5 bg-[#0f3a5d] hover:bg-[#164a75] text-white rounded text-xs font-semibold shadow-xs transition-colors"
               >
                 {isEdit ? 'Update Disbursement' : 'Save Disbursement'}
               </button>

@@ -240,6 +240,7 @@ export const PayOrderFormModal: React.FC<Props> = ({
             caseNumber: updated.case_number,
             donationName: updated.donation_name,
             donationAmount: updated.donation_amount,
+            judgementDate: updated.judgement_date,
             donationId: updated.donation_id
           });
         }
@@ -266,6 +267,7 @@ export const PayOrderFormModal: React.FC<Props> = ({
             caseNumber: created.case_number,
             donationName: created.donation_name,
             donationAmount: created.donation_amount,
+            judgementDate: created.judgement_date,
             donationId: created.donation_id
           });
         } else if (willKeepOpen) {
@@ -289,6 +291,7 @@ export const PayOrderFormModal: React.FC<Props> = ({
       !caseNumber.trim() &&
       !donationName.trim() &&
       !donationAmount.trim() &&
+      !judgementDate.trim() &&
       !payOrderNumber.trim() &&
       !poDate.trim() &&
       !bankName.trim() &&
@@ -337,6 +340,7 @@ export const PayOrderFormModal: React.FC<Props> = ({
                   caseNumber,
                   donationName,
                   donationAmount,
+                  judgementDate,
                   donationId: selectedDonationId
                 });
               }}
@@ -479,22 +483,25 @@ export const PayOrderFormModal: React.FC<Props> = ({
             )}
           </div>
 
-          {/* Row 3: Donation Name & Inserted Field: Donation Amount */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Row 3: Donation Name, Donation Amount & Judgement Date (Populated from Donation) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
-                Donation Name / Beneficiary Entity
+                Donation Name / Beneficiary
               </label>
               <input
                 type="text"
                 value={donationName}
                 onChange={e => setDonationName(e.target.value)}
-                placeholder="e.g. Apex Textile Mills Ltd. or Anjuman Mufidul Islam"
+                placeholder="e.g. Apex Textile Mills Ltd."
                 className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
               />
+              <span className="text-[10px] text-slate-400 mt-0.5 block truncate">
+                Entity cited in donation decree
+              </span>
             </div>
 
-            {/* Requested Inserted Field: Donation Amount */}
+            {/* Field: Donation Amount */}
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
                 Donation Amount ({settings.currencySymbol})
@@ -508,8 +515,21 @@ export const PayOrderFormModal: React.FC<Props> = ({
                 placeholder="0.00"
                 className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-slate-800 font-mono font-medium focus:outline-none focus:ring-1 focus:ring-teal-700"
               />
-              <span className="text-[10px] text-slate-400 mt-0.5 block">
-                Auto-populates from Donation Entry Form ({settings.currencyCode})
+              <span className="text-[10px] text-slate-400 mt-0.5 block truncate">
+                From Donation Form ({settings.currencyCode})
+              </span>
+            </div>
+
+            {/* Field: Judgement Date */}
+            <div>
+              <DatePicker
+                label="Judgement Date"
+                value={judgementDate}
+                onChange={setJudgementDate}
+                placeholder="dd-MM-yyyy"
+              />
+              <span className="text-[10px] text-slate-400 mt-0.5 block truncate">
+                Decreed Court Date
               </span>
             </div>
           </div>

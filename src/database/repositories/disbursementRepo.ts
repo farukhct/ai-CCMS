@@ -6,6 +6,7 @@
 
 import { query, get, run } from '../engine';
 import { DisbursementRecord, DisbursementStatus } from '../../types';
+import { toCanonicalDate, toDisplayDate } from '../../services/dateUtils';
 
 export interface DisbursementFilter {
   search?: string;
@@ -199,6 +200,17 @@ export const disbursementRepo = {
     const remarks = data.remarks?.trim() || '';
     const isUnlinked = data.is_unlinked ? 1 : 0;
 
+    // Strict validation: Judgement date must be strictly less than disbursement date
+    if (judgementDate && receivingDate) {
+      const cJudg = toCanonicalDate(judgementDate);
+      const cDisb = toCanonicalDate(receivingDate);
+      if (cJudg && cDisb && cJudg >= cDisb) {
+        throw new Error(
+          `Validation Error: Judgement Date (${toDisplayDate(cJudg)}) must be less than Disbursement Date (${toDisplayDate(cDisb)}). Record cannot be inserted into the database.`
+        );
+      }
+    }
+
     const res = run(
       `INSERT INTO Disbursements (
         serial_number, donation_id, pay_order_id, case_number, donation_name,
@@ -225,6 +237,20 @@ export const disbursementRepo = {
     const amount = (data.donation_amount !== undefined && data.donation_amount !== null && !isNaN(Number(data.donation_amount)))
       ? Number(data.donation_amount)
       : (data.donation_amount === null ? null : existing.donation_amount);
+
+    const nextJudg = data.judgement_date !== undefined ? data.judgement_date.trim() : (existing.judgement_date || '');
+    const nextDisb = data.receiving_date !== undefined ? data.receiving_date.trim() : (existing.receiving_date || '');
+
+    // Strict validation: Judgement date must be strictly less than disbursement date
+    if (nextJudg && nextDisb) {
+      const cJudg = toCanonicalDate(nextJudg);
+      const cDisb = toCanonicalDate(nextDisb);
+      if (cJudg && cDisb && cJudg >= cDisb) {
+        throw new Error(
+          `Validation Error: Judgement Date (${toDisplayDate(cJudg)}) must be less than Disbursement Date (${toDisplayDate(cDisb)}). Record cannot be updated in the database.`
+        );
+      }
+    }
 
     run(
       `UPDATE Disbursements SET

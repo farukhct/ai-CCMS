@@ -50,7 +50,7 @@ export const ReportsView: React.FC = () => {
     { id: 12, name: '12. Incomplete Records Audit Report', desc: 'Records requiring data completion (missing dates, amounts, or entities).' },
     { id: 13, name: '13. Custom-Filtered Dynamic Report', desc: 'Select bespoke columns and custom multi-field criteria.' },
     { id: 14, name: '14. System Security & Audit Log Report', desc: 'Privileged audit trail of user access and record modifications.', perm: 'view_audit_logs' },
-    { id: 15, name: '15. Pay Order Register', desc: 'Judicial bank pay order instruments with dates, case references, and issuing banks.' }
+    { id: 15, name: '15. Pay Order Register', desc: 'Judicial bank pay order instruments with amounts, dates, case citations, and issuing banks.' }
   ];
 
   // Compute Active Report Data & Columns
@@ -293,6 +293,8 @@ export const ReportsView: React.FC = () => {
         { header: 'Serial No', key: 'serial_number', width: 14 },
         { header: 'Case Number', key: 'case_number', width: 16 },
         { header: 'Donation Name', key: 'donation_name', width: 24 },
+        { header: 'Donation Amount', key: 'donation_amount', width: 18, align: 'right', isAmount: true },
+        { header: 'Judgement Date', key: 'judgement_date', width: 16, align: 'center', isDate: true },
         { header: 'Pay Order No', key: 'pay_order_number', width: 16 },
         { header: 'PO Date', key: 'po_date', width: 16, align: 'center', isDate: true },
         { header: 'Bank Name', key: 'bank_name', width: 20 },
@@ -309,6 +311,7 @@ export const ReportsView: React.FC = () => {
       sql += ' ORDER BY id DESC';
 
       rows = query(sql, p);
+      totalSum = rows.reduce((acc, cur) => acc + (cur.donation_amount || 0), 0);
     }
 
     return { title, columns, rows, totalSum };

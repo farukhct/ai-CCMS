@@ -35,6 +35,7 @@ export interface InitialPayOrderData {
   caseNumber?: string;
   donationName?: string;
   donationAmount?: number | string | null;
+  judgementDate?: string;
   donationId?: number | null;
 }
 

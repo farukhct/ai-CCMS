@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { payOrderRepo, PayOrderFilter } from '../../database/repositories/payOrderRepo';
 import { auditRepo } from '../../database/repositories/auditRepo';
+import { query } from '../../database/engine';
 import { PayOrderRecord } from '../../types';
 import { toDisplayDate } from '../../services/dateUtils';
 import { exportToExcel, exportToDocx, exportToPdf, ExportColumn } from '../../services/exportService';
@@ -18,12 +19,16 @@ import {
   CreditCard,
   Building,
   Link as LinkIcon,
-  Unlink
+  Unlink,
+  Coins,
+  Calendar,
+  SendHorizontal
 } from 'lucide-react';
 
 export const PayOrderEntryView: React.FC = () => {
   const {
     openPayOrderModal,
+    openDisbursementModal,
     showConfirm,
     addToast,
     hasPermission,
@@ -62,6 +67,18 @@ export const PayOrderEntryView: React.FC = () => {
     loadData();
   }, [loadData, dataVersion]);
 
+  // Overall financial and aggregate stats
+  const overallStats = React.useMemo(() => {
+    const sumRes = query<{ total_amt: number; linked_count: number; bank_count: number }>(`
+      SELECT 
+        COALESCE(SUM(donation_amount), 0) as total_amt,
+        SUM(CASE WHEN donation_id IS NOT NULL THEN 1 ELSE 0 END) as linked_count,
+        COUNT(DISTINCT bank_name) as bank_count
+      FROM PayOrders
+    `);
+    return sumRes[0] || { total_amt: 0, linked_count: 0, bank_count: 0 };
+  }, [dataVersion, total]);
+
   const handleDelete = (record: PayOrderRecord) => {
     if (!hasPermission('delete_records')) {
       addToast('Permission denied: You cannot delete records.', 'error');
@@ -70,7 +87,7 @@ export const PayOrderEntryView: React.FC = () => {
 
     showConfirm({
       title: 'Delete Pay Order Record?',
-      message: `Are you sure you want to permanently delete Pay Order Record #${record.id} (${record.pay_order_number || record.case_number || 'No Identifier'})? This action will be audited.`,
+      message: `Are you sure you want to permanently delete Pay Order Record #${record.id} (PO: ${record.pay_order_number || 'N/A'}, Case: ${record.case_number || 'N/A'})? This action will be audited.`,
       confirmLabel: 'Delete Record',
       isDestructive: true,
       onConfirm: () => {
@@ -92,11 +109,14 @@ export const PayOrderEntryView: React.FC = () => {
     });
   };
 
+  // Full fields for Export & Registers
   const exportColumns: ExportColumn[] = [
     { header: 'ID', key: 'id', width: 8, align: 'center' },
     { header: 'Serial No', key: 'serial_number', width: 14 },
     { header: 'Case Number', key: 'case_number', width: 16 },
     { header: 'Donation Name', key: 'donation_name', width: 24 },
+    { header: 'Donation Amount', key: 'donation_amount', width: 16, align: 'right', isAmount: true },
+    { header: 'Judgement Date', key: 'judgement_date', width: 16, align: 'center', isDate: true },
     { header: 'Pay Order No', key: 'pay_order_number', width: 16 },
     { header: 'PO Date', key: 'po_date', width: 16, align: 'center', isDate: true },
     { header: 'Bank Name', key: 'bank_name', width: 20 },
@@ -181,7 +201,7 @@ export const PayOrderEntryView: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Judicial pay order instruments linked to court-decreed Donations and corporate case proceedings
+            Judicial pay order instruments with full field register (amounts, decreed dates, case citations, issuing banks)
           </p>
         </div>
 
@@ -227,6 +247,53 @@ export const PayOrderEntryView: React.FC = () => {
         </div>
       </div>
 
+      {/* Key Metric Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-medium">Total Pay Orders</span>
+            <CreditCard className="w-3.5 h-3.5 text-slate-400" />
+          </div>
+          <div className="text-lg font-bold text-slate-900 font-mono">
+            {total}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-0.5">Court instruments logged</p>
+        </div>
+
+        <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-medium">Total Decreed Amount</span>
+            <Coins className="w-3.5 h-3.5 text-emerald-600" />
+          </div>
+          <div className="text-lg font-bold text-emerald-700 font-mono truncate" title={`${settings.currencySymbol} ${Number(overallStats.total_amt).toLocaleString()}`}>
+            {settings.currencySymbol} {Number(overallStats.total_amt).toLocaleString(undefined, { minimumFractionDigits: settings.decimalPrecision || 2, maximumFractionDigits: settings.decimalPrecision || 2 })}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-0.5">Aggregate valuation</p>
+        </div>
+
+        <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-medium">Linked to Donations</span>
+            <LinkIcon className="w-3.5 h-3.5 text-teal-600" />
+          </div>
+          <div className="text-lg font-bold text-teal-700 font-mono">
+            {overallStats.linked_count} <span className="text-xs font-normal text-slate-400">/ {total}</span>
+          </div>
+          <p className="text-[10px] text-slate-400 mt-0.5">Populated from donations</p>
+        </div>
+
+        <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-medium">Banking Partners</span>
+            <Building className="w-3.5 h-3.5 text-blue-600" />
+          </div>
+          <div className="text-lg font-bold text-slate-900 font-mono">
+            {overallStats.bank_count}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-0.5">Distinct financial institutions</p>
+        </div>
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex flex-wrap items-center gap-2 flex-1">
@@ -240,7 +307,7 @@ export const PayOrderEntryView: React.FC = () => {
                 setSearchTerm(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search serial, PO number, bank, case..."
+              placeholder="Search serial, PO number, bank, case, entity..."
               className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-300 rounded text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-teal-700 text-xs"
             />
             {searchTerm && (
@@ -298,10 +365,10 @@ export const PayOrderEntryView: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Records Table */}
+      {/* Main Records Table with ALL Fields */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
             <thead className="bg-[#0f3a5d] text-white select-none">
               <tr>
                 <th
@@ -342,12 +409,30 @@ export const PayOrderEntryView: React.FC = () => {
                 </th>
                 <th
                   onClick={() => {
+                    if (sortBy === 'donation_amount') setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC');
+                    else { setSortBy('donation_amount'); setSortOrder('DESC'); }
+                  }}
+                  className="py-2.5 px-3 font-semibold cursor-pointer hover:bg-white/10 text-right"
+                >
+                  Donation Amount ({settings.currencySymbol}) {sortBy === 'donation_amount' && (sortOrder === 'ASC' ? '↑' : '↓')}
+                </th>
+                <th
+                  onClick={() => {
+                    if (sortBy === 'judgement_date') setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC');
+                    else { setSortBy('judgement_date'); setSortOrder('DESC'); }
+                  }}
+                  className="py-2.5 px-3 font-semibold cursor-pointer hover:bg-white/10 text-center"
+                >
+                  Judgement Date {sortBy === 'judgement_date' && (sortOrder === 'ASC' ? '↑' : '↓')}
+                </th>
+                <th
+                  onClick={() => {
                     if (sortBy === 'pay_order_number') setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC');
                     else { setSortBy('pay_order_number'); setSortOrder('ASC'); }
                   }}
                   className="py-2.5 px-3 font-semibold cursor-pointer hover:bg-white/10"
                 >
-                  Pay Order Number {sortBy === 'pay_order_number' && (sortOrder === 'ASC' ? '↑' : '↓')}
+                  Pay Order No {sortBy === 'pay_order_number' && (sortOrder === 'ASC' ? '↑' : '↓')}
                 </th>
                 <th
                   onClick={() => {
@@ -381,7 +466,7 @@ export const PayOrderEntryView: React.FC = () => {
             <tbody className="divide-y divide-slate-200">
               {records.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={12} className="py-12 text-center text-slate-400">
                     <CreditCard className="w-8 h-8 mx-auto mb-2 text-slate-300 stroke-1" />
                     <p className="text-sm font-medium text-slate-600">No Pay Order records found</p>
                     <p className="text-xs text-slate-400 mt-0.5">
@@ -394,20 +479,27 @@ export const PayOrderEntryView: React.FC = () => {
               ) : (
                 records.map(rec => (
                   <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
+                    {/* 1. ID */}
                     <td className="py-2 px-3 text-center text-slate-500 font-mono text-[11px]">
                       {rec.id}
                     </td>
-                    <td className="py-2 px-3 font-mono text-[11px] font-semibold text-slate-700">
+
+                    {/* 2. Serial Number */}
+                    <td className="py-2 px-3 font-mono text-[11px] font-semibold text-slate-700 whitespace-nowrap">
                       {rec.serial_number || '-'}
                     </td>
-                    <td className="py-2 px-3 font-medium text-slate-900 font-mono text-[11px]">
+
+                    {/* 3. Case Number */}
+                    <td className="py-2 px-3 font-medium text-slate-900 font-mono text-[11px] whitespace-nowrap">
                       {rec.case_number ? (
                         <span className="text-[#0f3a5d] font-semibold">{rec.case_number}</span>
                       ) : (
                         <span className="text-slate-400 italic">No Case</span>
                       )}
                     </td>
-                    <td className="py-2 px-3 font-medium text-slate-800 max-w-[180px] truncate" title={rec.donation_name}>
+
+                    {/* 4. Donation Name */}
+                    <td className="py-2 px-3 font-medium text-slate-800 max-w-[170px] truncate" title={rec.donation_name}>
                       <div className="flex items-center gap-1.5">
                         <span className="truncate">{rec.donation_name || '-'}</span>
                         {rec.donation_id ? (
@@ -422,23 +514,78 @@ export const PayOrderEntryView: React.FC = () => {
                         ) : null}
                       </div>
                     </td>
-                    <td className="py-2 px-3 font-mono font-medium text-emerald-800 text-[11px]">
+
+                    {/* 5. Donation Amount (Requested field showing in entry & register) */}
+                    <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-700 whitespace-nowrap">
+                      {rec.donation_amount !== null && rec.donation_amount !== undefined ? (
+                        `${settings.currencySymbol} ${Number(rec.donation_amount).toLocaleString(undefined, { minimumFractionDigits: settings.decimalPrecision || 2, maximumFractionDigits: settings.decimalPrecision || 2 })}`
+                      ) : (
+                        <span className="text-slate-300 font-normal">-</span>
+                      )}
+                    </td>
+
+                    {/* 6. Judgement Date (Decreed Court Date) */}
+                    <td className="py-2 px-3 text-center font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                      {rec.judgement_date ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          {toDisplayDate(rec.judgement_date)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
+                    </td>
+
+                    {/* 7. Pay Order Number */}
+                    <td className="py-2 px-3 font-mono font-medium text-emerald-800 text-[11px] whitespace-nowrap">
                       {rec.pay_order_number || '-'}
                     </td>
-                    <td className="py-2 px-3 text-center font-mono text-[11px] text-slate-600">
+
+                    {/* 8. PO Date */}
+                    <td className="py-2 px-3 text-center font-mono text-[11px] text-slate-600 whitespace-nowrap">
                       {toDisplayDate(rec.po_date)}
                     </td>
-                    <td className="py-2 px-3 text-slate-700">
+
+                    {/* 9. Bank Name */}
+                    <td className="py-2 px-3 text-slate-700 max-w-[130px] truncate" title={rec.bank_name}>
                       {rec.bank_name || '-'}
                     </td>
-                    <td className="py-2 px-3 text-slate-600">
+
+                    {/* 10. Branch Name */}
+                    <td className="py-2 px-3 text-slate-600 max-w-[120px] truncate" title={rec.branch_name}>
                       {rec.branch_name || '-'}
                     </td>
-                    <td className="py-2 px-3 text-slate-500 max-w-[140px] truncate" title={rec.remarks}>
+
+                    {/* 11. Remarks */}
+                    <td className="py-2 px-3 text-slate-500 max-w-[120px] truncate" title={rec.remarks}>
                       {rec.remarks || '-'}
                     </td>
-                    <td className="py-2 px-3 text-right pr-4">
+
+                    {/* 12. Actions */}
+                    <td className="py-2 px-3 text-right pr-4 whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1">
+                        {/* Quick create disbursement with pre-populated PO data */}
+                        <button
+                          onClick={() => {
+                            openDisbursementModal(undefined, rec.donation_id || undefined, {
+                              payOrderId: rec.id,
+                              payOrderNumber: rec.pay_order_number,
+                              poDate: rec.po_date,
+                              bankName: rec.bank_name,
+                              branchName: rec.branch_name,
+                              caseNumber: rec.case_number,
+                              donationName: rec.donation_name,
+                              donationAmount: rec.donation_amount,
+                              judgementDate: rec.judgement_date,
+                              donationId: rec.donation_id
+                            });
+                          }}
+                          className="p-1 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                          title="Create Disbursement from this Pay Order"
+                        >
+                          <SendHorizontal className="w-3.5 h-3.5" />
+                        </button>
+
                         {hasPermission('edit_records') && (
                           <button
                             onClick={() => openPayOrderModal(rec.id)}
@@ -463,6 +610,23 @@ export const PayOrderEntryView: React.FC = () => {
                 ))
               )}
             </tbody>
+
+            {/* Table Footer with Summary Sum */}
+            {records.length > 0 && (
+              <tfoot className="bg-slate-50 border-t-2 border-slate-300 font-semibold text-slate-800">
+                <tr>
+                  <td colSpan={4} className="py-2.5 px-3 text-right text-xs text-slate-600">
+                    Visible Page Total ({records.length} {records.length === 1 ? 'record' : 'records'}):
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono text-xs text-emerald-800 whitespace-nowrap">
+                    {settings.currencySymbol} {records.reduce((sum, r) => sum + (r.donation_amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: settings.decimalPrecision || 2, maximumFractionDigits: settings.decimalPrecision || 2 })}
+                  </td>
+                  <td colSpan={7} className="py-2.5 px-3 text-xs text-slate-400 text-right pr-4">
+                    Grand Decreed Total: <strong className="text-slate-700 font-mono">{settings.currencySymbol} {Number(overallStats.total_amt).toLocaleString(undefined, { minimumFractionDigits: settings.decimalPrecision || 2, maximumFractionDigits: settings.decimalPrecision || 2 })}</strong>
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
 
