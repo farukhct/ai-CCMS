@@ -9,6 +9,7 @@ import { getDatabase, reseedDatabase } from '../database/engine';
 import { userRepo } from '../database/repositories/userRepo';
 import { settingsRepo, DEFAULT_APP_SETTINGS } from '../database/repositories/settingsRepo';
 import { auditRepo } from '../database/repositories/auditRepo';
+import { backupService, FactoryResetServiceOptions, FactoryResetServiceResult } from '../services/backupService';
 
 export interface ToastMessage {
   id: string;
@@ -72,11 +73,12 @@ interface AppContextType {
   showConfirm: (opts: ConfirmDialogOptions) => void;
   closeConfirm: () => void;
   openApplicationModal: (id?: number) => void;
-  openDonationModal: (id?: number) => void;
+  openDonationModal: (id?: number, applicationId?: number) => void;
   openDisbursementModal: (id?: number, donationId?: number, initialPayOrderData?: InitialPayOrderData) => void;
   openPayOrderModal: (id?: number, donationId?: number, initialData?: InitialPayOrderModalData) => void;
   appModalId: number | null | undefined;
   donationModalId: number | null | undefined;
+  donationApplicationId: number | null | undefined;
   disbursementModalId: number | null | undefined;
   disbursementDonationId: number | null | undefined;
   disbursementPayOrderData: InitialPayOrderData | undefined;
@@ -86,6 +88,10 @@ interface AppContextType {
   dataVersion: number;
   refreshData: () => void;
   closeAllModals: () => void;
+  isFactoryResetModalOpen: boolean;
+  openFactoryResetModal: () => void;
+  closeFactoryResetModal: () => void;
+  executeFactoryReset: (options: FactoryResetServiceOptions) => Promise<FactoryResetServiceResult>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -105,12 +111,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [appModalId, setAppModalId] = useState<number | null | undefined>(undefined);
   const [donationModalId, setDonationModalId] = useState<number | null | undefined>(undefined);
+  const [donationApplicationId, setDonationApplicationId] = useState<number | null | undefined>(undefined);
   const [disbursementModalId, setDisbursementModalId] = useState<number | null | undefined>(undefined);
   const [disbursementDonationId, setDisbursementDonationId] = useState<number | null | undefined>(undefined);
   const [disbursementPayOrderData, setDisbursementPayOrderData] = useState<InitialPayOrderData | undefined>(undefined);
   const [payOrderModalId, setPayOrderModalId] = useState<number | null | undefined>(undefined);
   const [payOrderDonationId, setPayOrderDonationId] = useState<number | null | undefined>(undefined);
   const [payOrderInitialData, setPayOrderInitialData] = useState<InitialPayOrderModalData | undefined>(undefined);
+  const [isFactoryResetModalOpen, setIsFactoryResetModalOpen] = useState(false);
+
+  const openFactoryResetModal = useCallback(() => {
+    setIsFactoryResetModalOpen(true);
+  }, []);
+
+  const closeFactoryResetModal = useCallback(() => {
+    setIsFactoryResetModalOpen(false);
+  }, []);
 
   const refreshData = useCallback(() => {
     setDataVersion(v => v + 1);
@@ -281,8 +297,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAppModalId(id ?? null);
   }, []);
 
-  const openDonationModal = useCallback((id?: number) => {
+  const openDonationModal = useCallback((id?: number, applicationId?: number) => {
     setDonationModalId(id ?? null);
+    setDonationApplicationId(applicationId ?? null);
   }, []);
 
   const openDisbursementModal = useCallback((id?: number, donationId?: number, initialPayOrderData?: InitialPayOrderData) => {
@@ -300,6 +317,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const closeAllModals = useCallback(() => {
     setAppModalId(undefined);
     setDonationModalId(undefined);
+    setDonationApplicationId(undefined);
     setDisbursementModalId(undefined);
     setDisbursementDonationId(undefined);
     setDisbursementPayOrderData(undefined);
@@ -321,6 +339,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     addToast('Sample court data reloaded successfully.', 'success');
   }, [addToast]);
+
+  const executeFactoryReset = useCallback(async (options: FactoryResetServiceOptions): Promise<FactoryResetServiceResult> => {
+    const res = await backupService.executeFactoryReset({
+      ...options,
+      currentUserId: currentUser?.id,
+      user: currentUser
+    });
+
+    // 1. Invalidate and re-query data across all registers
+    refreshData();
+    refreshUsersCheck();
+
+    // 2. Refresh settings state
+    setSettingsState(settingsRepo.getSettings());
+
+    // 3. Handle session state based on reset mode
+    if (options.mode === 'first_run_setup') {
+      setCurrentUser(null);
+      setPermissions([]);
+      setHasUsers(false);
+      setActiveTab('dashboard');
+    } else {
+      const usersExist = userRepo.hasAnyUser();
+      setHasUsers(usersExist);
+
+      if (options.preserveCurrentUser && currentUser) {
+        const refreshedUser = userRepo.getByUsername(currentUser.username);
+        if (refreshedUser) {
+          setCurrentUser(refreshedUser);
+          setPermissions(userRepo.getRolePermissions(refreshedUser.role));
+        } else {
+          const defaultAdmin = userRepo.getByUsername('admin');
+          if (defaultAdmin) {
+            setCurrentUser(defaultAdmin);
+            setPermissions(userRepo.getRolePermissions(defaultAdmin.role));
+          }
+        }
+      } else {
+        const defaultAdmin = userRepo.getByUsername('admin');
+        if (defaultAdmin) {
+          setCurrentUser(defaultAdmin);
+          setPermissions(userRepo.getRolePermissions(defaultAdmin.role));
+        }
+      }
+      setActiveTab('dashboard');
+    }
+
+    closeAllModals();
+    setIsFactoryResetModalOpen(false);
+    addToast(res.message, 'success');
+    return res;
+  }, [currentUser, refreshData, refreshUsersCheck, closeAllModals, addToast]);
 
   return (
     <AppContext.Provider
@@ -355,6 +425,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openPayOrderModal,
         appModalId,
         donationModalId,
+        donationApplicationId,
         disbursementModalId,
         disbursementDonationId,
         disbursementPayOrderData,
@@ -363,7 +434,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         payOrderInitialData,
         dataVersion,
         refreshData,
-        closeAllModals
+        closeAllModals,
+        isFactoryResetModalOpen,
+        openFactoryResetModal,
+        closeFactoryResetModal,
+        executeFactoryReset
       }}
     >
       {children}

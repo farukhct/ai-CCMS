@@ -6,15 +6,17 @@ import { payOrderRepo } from '../../database/repositories/payOrderRepo';
 import { auditRepo } from '../../database/repositories/auditRepo';
 import { DonationRecord, ApplicationRecord, PayOrderRecord } from '../../types';
 import { DatePicker } from '../common/DatePicker';
-import { X, Sparkles, AlertCircle, Building2, Link as LinkIcon, Unlink, Plus, CreditCard, ChevronDown, ChevronUp } from 'lucide-react';
+import { toDisplayDate } from '../../services/dateUtils';
+import { X, Sparkles, AlertCircle, Building2, Link as LinkIcon, Unlink, Plus, CreditCard, ChevronDown, ChevronUp, CheckCircle2 } from 'lucide-react';
 
 interface Props {
   recordId: number | null | undefined;
+  initialApplicationId?: number | null;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved }) => {
+export const DonationFormModal: React.FC<Props> = ({ recordId, initialApplicationId, onClose, onSaved }) => {
   const { currentUser, addToast, showConfirm, settings, openPayOrderModal } = useApp();
 
   const isEdit = typeof recordId === 'number';
@@ -39,16 +41,16 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
   // Dropdown options from Applications
   const [availableApplications, setAvailableApplications] = useState<ApplicationRecord[]>([]);
   const [matchedApp, setMatchedApp] = useState<ApplicationRecord | null>(null);
+  const [distinctNames, setDistinctNames] = useState<string[]>([]);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [keepOpen, setKeepOpen] = useState(false);
 
   useEffect(() => {
     // Load all applications that have donation_name or id
-    const res = applicationRepo.getAll({ pageSize: 500, sortBy: 'donation_name', sortOrder: 'ASC' });
+    const res = applicationRepo.getAll({ pageSize: 10000, sortBy: 'donation_name', sortOrder: 'ASC' });
     setAvailableApplications(res.data);
-  }, []);
+    setDistinctNames(applicationRepo.getDistinctDonationNames());
 
-  useEffect(() => {
     if (isEdit && recordId) {
       const existing = donationRepo.getById(recordId);
       if (existing) {
@@ -64,37 +66,78 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
         if (existing.application_id) {
           const app = applicationRepo.getById(existing.application_id);
           setMatchedApp(app);
+        } else if (existing.donation_name) {
+          const matched = res.data.find(a => a.donation_name && a.donation_name.trim().toLowerCase() === existing.donation_name.trim().toLowerCase());
+          if (matched) setMatchedApp(matched);
         }
       }
     } else if (recordId === null) {
       setSerialNumber(donationRepo.getNextSerialNumber());
       setCaseNumber('');
-      setSelectedAppId(null);
-      setDonationName('');
-      setIsManualName(false);
       setDonationAmount('');
       setJudgementDate('');
       setRemarks('');
+      setDuplicateWarning(null);
+
+      // Auto-populate immediately if opened with initialApplicationId from Application Entry!
+      if (initialApplicationId) {
+        setSelectedAppId(initialApplicationId);
+        const app = applicationRepo.getById(initialApplicationId);
+        if (app) {
+          setMatchedApp(app);
+          setDonationName(app.donation_name || '');
+          setIsManualName(false);
+          return;
+        }
+      }
+
+      setSelectedAppId(null);
+      setDonationName('');
+      setIsManualName(false);
       setMatchedApp(null);
     }
-  }, [recordId, isEdit]);
+  }, [recordId, isEdit, initialApplicationId]);
 
-  // When selected application changes from dropdown
+  // When selected application changes from dropdown (populates donation name directly)
   const handleSelectApplication = (appIdStr: string) => {
     if (!appIdStr) {
       setSelectedAppId(null);
       setMatchedApp(null);
-      setDonationName('');
       return;
     }
 
     const id = parseInt(appIdStr, 10);
     setSelectedAppId(id);
-    const app = applicationRepo.getById(id);
+    const app = applicationRepo.getById(id) || availableApplications.find(a => a.id === id);
     if (app) {
       setMatchedApp(app);
-      setDonationName(app.donation_name);
+      setDonationName(app.donation_name || '');
       setIsManualName(false);
+      addToast(`Donation Name populated from Application Entry: "${app.donation_name || `App #${app.id}`}"`, 'info');
+    }
+  };
+
+  // When user edits or types into Donation Name (auto-links if matches application entry)
+  const handleDonationNameChange = (val: string) => {
+    setDonationName(val);
+    const trimmed = val.trim().toLowerCase();
+    if (!trimmed) {
+      setSelectedAppId(null);
+      setMatchedApp(null);
+      return;
+    }
+
+    const match = availableApplications.find(
+      a => a.donation_name && a.donation_name.trim().toLowerCase() === trimmed
+    );
+    if (match) {
+      setSelectedAppId(match.id);
+      setMatchedApp(match);
+      setIsManualName(false);
+    } else {
+      setIsManualName(true);
+      setSelectedAppId(null);
+      setMatchedApp(null);
     }
   };
 
@@ -362,83 +405,122 @@ export const DonationFormModal: React.FC<Props> = ({ recordId, onClose, onSaved 
             </div>
           </div>
 
-          {/* Row 2: Linked Donation Name Selection */}
-          <div className="bg-slate-50 p-3.5 rounded border border-slate-200 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="font-semibold text-slate-800 flex items-center gap-1.5">
+          {/* Row 2: Application Entry Selection & Populated Donation Name */}
+          <div className="bg-slate-50 p-3.5 rounded border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
+              <label className="font-semibold text-slate-800 flex items-center gap-1.5 text-xs">
                 <Building2 className="w-4 h-4 text-[#0f3a5d]" />
-                Donation Name Selection
+                Application Entry & Donation Name
               </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsManualName(!isManualName);
-                  if (!isManualName) {
-                    setSelectedAppId(null);
-                    setMatchedApp(null);
-                  }
-                }}
-                className="text-[11px] text-teal-800 hover:underline flex items-center gap-1"
-              >
-                {isManualName ? (
-                  <>
-                    <LinkIcon className="w-3 h-3" />
-                    Switch to Linked Application Dropdown
-                  </>
-                ) : (
-                  <>
-                    <Unlink className="w-3 h-3" />
-                    Enter Custom Unlinked Name
-                  </>
-                )}
-              </button>
+              {availableApplications.length > 0 && (
+                <span className="text-[11px] text-teal-800 font-medium">
+                  {availableApplications.length} Application Entries Available
+                </span>
+              )}
             </div>
 
-            {!isManualName ? (
-              <div>
-                <select
-                  value={selectedAppId || ''}
-                  onChange={e => handleSelectApplication(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
-                >
-                  <option value="">-- Select from Registered Applications --</option>
-                  {availableApplications.map(app => (
-                    <option key={app.id} value={app.id}>
-                      {app.donation_name || `[Application #${app.id}]`} {app.serial_number ? `(${app.serial_number})` : ''}
-                    </option>
-                  ))}
-                </select>
-                <span className="text-[10px] text-slate-400 mt-1 block">
-                  Select an application to preserve internal relational linkage.
-                </span>
+            {/* Application Entry Selector Dropdown */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-semibold text-slate-700">
+                  Select Application Entry (Auto-populates Donation Name)
+                </label>
+                {availableApplications.length > 0 && !selectedAppId && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectApplication(String(availableApplications[0].id))}
+                    className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Populate from Latest Application
+                  </button>
+                )}
               </div>
-            ) : (
-              <div>
-                <input
-                  type="text"
-                  value={donationName}
-                  onChange={e => setDonationName(e.target.value)}
-                  onBlur={handleCheckDuplicate}
-                  placeholder="Enter custom donation name (will be flagged as Unlinked)"
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700"
-                />
-                <span className="text-[10px] text-amber-700 mt-0.5 block">
-                  Note: Manually entered names are marked as unlinked.
-                </span>
+              <select
+                value={selectedAppId || ''}
+                onChange={e => handleSelectApplication(e.target.value)}
+                className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-700 text-xs font-medium"
+              >
+                <option value="">-- Choose Application Entry to Populate Donation Name --</option>
+                {availableApplications.map(app => (
+                  <option key={app.id} value={app.id}>
+                    {app.donation_name ? app.donation_name : '(No Name)'} · {app.serial_number || `App #${app.id}`} {app.application_date ? `· Date: ${toDisplayDate(app.application_date)}` : ''} {app.bank_name ? `· ${app.bank_name}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Donation Name Input Field */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+                  <span>Donation Name</span>
+                  {matchedApp && (
+                    <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100/80 px-1.5 py-0.5 rounded border border-emerald-300">
+                      Populated from Application Entry
+                    </span>
+                  )}
+                </label>
+                {selectedAppId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAppId(null);
+                      setMatchedApp(null);
+                      setIsManualName(true);
+                    }}
+                    className="text-[10px] text-slate-500 hover:text-slate-800 underline cursor-pointer"
+                  >
+                    Clear Application Link
+                  </button>
+                )}
               </div>
-            )}
+              <input
+                type="text"
+                list="application-donation-names-list"
+                value={donationName}
+                onChange={e => handleDonationNameChange(e.target.value)}
+                onBlur={handleCheckDuplicate}
+                placeholder="Donation name (auto-populated when application entry is selected)"
+                className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-teal-700"
+              />
+              <datalist id="application-donation-names-list">
+                {distinctNames.map(name => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                {matchedApp ? (
+                  <span className="text-emerald-700 font-medium">
+                    ✓ Linked to Application Entry {matchedApp.serial_number ? `(${matchedApp.serial_number})` : `#${matchedApp.id}`}.
+                  </span>
+                ) : (
+                  <span>
+                    Select an Application Entry above to auto-populate this field, or choose from registered names in the suggestions list.
+                  </span>
+                )}
+              </span>
+            </div>
 
             {/* Matched Application Preview Card */}
             {matchedApp && (
-              <div className="mt-2 p-2.5 bg-white rounded border border-slate-200 text-[11px] space-y-1">
-                <div className="font-semibold text-slate-800">
-                  Linked Application Record: #{matchedApp.id} ({matchedApp.serial_number || 'No Serial'})
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-emerald-950 text-[11px] space-y-1.5">
+                <div className="font-semibold text-emerald-900 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    Application Record #{matchedApp.id}: <strong>{matchedApp.donation_name || '(No Name)'}</strong>
+                  </span>
+                  <span className="font-mono text-[10px] text-emerald-700 bg-white/70 px-2 py-0.5 rounded border border-emerald-200">
+                    {matchedApp.serial_number || 'No Serial'}
+                  </span>
                 </div>
-                <div className="text-slate-600">
-                  <span className="text-slate-400">Address:</span> {matchedApp.address || '-'} · <span className="text-slate-400">Phone:</span> {matchedApp.phone_number || '-'}
-                </div>
-                <div className="text-slate-600">
-                  <span className="text-slate-400">Bank:</span> {matchedApp.bank_name || '-'} ({matchedApp.branch_name || '-'}) · <span className="text-slate-400">A/C:</span> {matchedApp.bank_account_number || '-'}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-emerald-800 pt-1 border-t border-emerald-200/60 font-mono">
+                  <div><span className="font-medium text-emerald-900 font-sans">Address:</span> {matchedApp.address || '-'}</div>
+                  <div><span className="font-medium text-emerald-900 font-sans">Phone:</span> {matchedApp.phone_number || '-'}</div>
+                  <div><span className="font-medium text-emerald-900 font-sans">Bank:</span> {matchedApp.bank_name || '-'} {matchedApp.branch_name ? `(${matchedApp.branch_name})` : ''}</div>
+                  <div><span className="font-medium text-emerald-900 font-sans">Account:</span> {matchedApp.bank_account_number || '-'}</div>
+                  <div><span className="font-medium text-emerald-900 font-sans">App Date:</span> {matchedApp.application_date ? toDisplayDate(matchedApp.application_date) : '-'}</div>
+                  <div><span className="font-medium text-emerald-900 font-sans">Routing:</span> {matchedApp.routing_number || '-'}</div>
                 </div>
               </div>
             )}

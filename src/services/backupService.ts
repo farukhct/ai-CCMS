@@ -11,6 +11,9 @@ import {
   get,
   deleteTablesData,
   getDatabaseTableStats,
+  factoryResetDatabase,
+  FactoryResetOptions,
+  FactoryResetResult,
   TableStatInfo,
   DeleteTablesResult
 } from '../database/engine';
@@ -39,6 +42,15 @@ export interface PurgeTablesOptions {
 
 export interface PurgeTablesResult extends DeleteTablesResult {
   success: boolean;
+  backupFilename?: string;
+}
+
+export interface FactoryResetServiceOptions extends FactoryResetOptions {
+  createSafetyBackup?: boolean;
+  user?: User | null;
+}
+
+export interface FactoryResetServiceResult extends FactoryResetResult {
   backupFilename?: string;
 }
 
@@ -171,6 +183,44 @@ export const backupService = {
       backupFilename,
       deletedCounts: delResult.deletedCounts,
       totalDeleted: delResult.totalDeleted
+    };
+  },
+
+  /**
+   * Executes a full or selective application factory reset with optional automatic safety backup
+   */
+  async executeFactoryReset(options: FactoryResetServiceOptions): Promise<FactoryResetServiceResult> {
+    let backupFilename: string | undefined;
+
+    // 1. Take safety snapshot first if requested (recommended by default)
+    if (options.createSafetyBackup !== false) {
+      try {
+        const backupRes = this.createBackup();
+        backupFilename = backupRes.filename;
+      } catch (err) {
+        console.warn('Safety backup could not be downloaded before factory reset:', err);
+      }
+    }
+
+    // 2. Perform factory reset in database engine
+    const resetResult = factoryResetDatabase(options);
+
+    // 3. Log audit event
+    try {
+      auditRepo.log(
+        'SYSTEM_SETUP',
+        'Database',
+        null,
+        `Factory Reset executed (Mode: ${options.mode})${backupFilename ? ` with pre-reset backup "${backupFilename}"` : ''}`,
+        options.user || undefined
+      );
+    } catch (auditErr) {
+      console.warn('Could not write audit log for Factory Reset:', auditErr);
+    }
+
+    return {
+      ...resetResult,
+      backupFilename
     };
   }
 };

@@ -11,11 +11,13 @@ import {
   Save,
   RotateCcw,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  AlertOctagon,
+  AlertTriangle
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
-  const { settings, updateSettings, addToast, showConfirm, reseedData } = useApp();
+  const { settings, updateSettings, addToast, showConfirm, reseedData, openFactoryResetModal } = useApp();
 
   const [form, setForm] = useState<AppSettings>(() => ({ ...settings }));
   const [hasChanges, setHasChanges] = useState(false);
@@ -114,6 +116,14 @@ export const SettingsView: React.FC = () => {
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Reload Sample Data
+          </button>
+          <button
+            type="button"
+            onClick={openFactoryResetModal}
+            className="px-3 py-1.5 border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <AlertOctagon className="w-3.5 h-3.5 text-rose-700" />
+            Factory Reset
           </button>
           <button
             type="button"
@@ -394,6 +404,51 @@ export const SettingsView: React.FC = () => {
                 Integrity Result: {integrityMessage}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Section 5: Application Factory Reset Facility */}
+        <div className="bg-rose-50/60 p-5 rounded-lg border border-rose-300 shadow-2xs space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-rose-200">
+            <div className="flex items-center gap-2">
+              <AlertOctagon className="w-4 h-4 text-rose-700" />
+              <h2 className="text-sm font-bold text-rose-950">
+                Application Factory Reset Facility
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={openFactoryResetModal}
+              className="px-3.5 py-1.5 bg-rose-700 hover:bg-rose-800 text-white rounded text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Open Factory Reset Facility
+            </button>
+          </div>
+
+          <p className="text-xs text-rose-900 leading-relaxed">
+            The Factory Reset Facility restores the system to its original state. You can choose to wipe all court records for a clean production start (0 records), reload official sample data, or perform an out-of-the-box fresh install that restarts the Initial Setup Wizard.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+            <div className="bg-white/80 p-3 rounded border border-rose-200">
+              <div className="font-bold text-slate-900 mb-1">Production Clean Slate</div>
+              <p className="text-[11px] text-slate-600">
+                Wipes all operational applications, decrees, pay orders, and payouts. Numbering sequences are reset to 0.
+              </p>
+            </div>
+            <div className="bg-white/80 p-3 rounded border border-rose-200">
+              <div className="font-bold text-slate-900 mb-1">Demo / Sample State</div>
+              <p className="text-[11px] text-slate-600">
+                Reloads authentic court sample records with default administrative credentials.
+              </p>
+            </div>
+            <div className="bg-white/80 p-3 rounded border border-rose-200">
+              <div className="font-bold text-slate-900 mb-1">Safety Pre-Backup</div>
+              <p className="text-[11px] text-slate-600">
+                Automatically downloads a complete SQLite <code className="font-mono">.db</code> snapshot prior to wipe.
+              </p>
+            </div>
           </div>
         </div>
       </form>

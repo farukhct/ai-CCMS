@@ -25,7 +25,8 @@ export const DashboardView: React.FC = () => {
     openDonationModal,
     openDisbursementModal,
     hasPermission,
-    setActiveTab
+    setActiveTab,
+    dataVersion
   } = useApp();
 
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'month' | 'year'>('all');
@@ -91,7 +92,7 @@ export const DashboardView: React.FC = () => {
       recentDons,
       recentDiss
     };
-  }, [dateFilter, refreshKey]);
+  }, [dateFilter, refreshKey, dataVersion]);
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">

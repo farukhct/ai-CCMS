@@ -19,11 +19,13 @@ import {
   Coins,
   Receipt,
   FileText,
+  CreditCard,
   History,
   CheckSquare,
   Square,
   ShieldAlert,
-  Info
+  Info,
+  RotateCcw
 } from 'lucide-react';
 
 export const BackupRestoreView: React.FC = () => {
@@ -31,7 +33,9 @@ export const BackupRestoreView: React.FC = () => {
     addToast,
     hasPermission,
     currentUser,
-    refreshUsersCheck
+    refreshUsersCheck,
+    refreshData,
+    openFactoryResetModal
   } = useApp();
 
   // Backup & Restore states
@@ -108,6 +112,7 @@ export const BackupRestoreView: React.FC = () => {
         auditRepo.log('DB_RESTORE', 'Database', null, `Restored database from file "${restoreFile.name}"`, currentUser || undefined);
         addToast('Database successfully restored and verified.', 'success');
         refreshUsersCheck();
+        refreshData();
         setRestoreFile(null);
         handleRefreshStats();
       } else {
@@ -131,7 +136,7 @@ export const BackupRestoreView: React.FC = () => {
 
   // Quick preset selections
   const handleSelectOperational = () => {
-    setSelectedTables(['Applications', 'Donations', 'Disbursements']);
+    setSelectedTables(['Applications', 'Donations', 'PayOrders', 'Disbursements']);
   };
 
   const handleSelectAllTables = () => {
@@ -208,6 +213,8 @@ export const BackupRestoreView: React.FC = () => {
         return <Layers className="w-4 h-4 text-teal-600" />;
       case 'Donations':
         return <Coins className="w-4 h-4 text-amber-600" />;
+      case 'PayOrders':
+        return <CreditCard className="w-4 h-4 text-indigo-600" />;
       case 'Disbursements':
         return <Receipt className="w-4 h-4 text-emerald-600" />;
       case 'AuditLogs':
@@ -299,6 +306,10 @@ export const BackupRestoreView: React.FC = () => {
             <div className="flex justify-between">
               <span className="text-slate-600">Donations:</span>
               <span className="font-bold text-slate-900">{manifest.recordCounts.donations}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-600">Pay Orders:</span>
+              <span className="font-bold text-slate-900">{manifest.recordCounts.payOrders || 0}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-600">Disbursements:</span>
@@ -553,6 +564,43 @@ export const BackupRestoreView: React.FC = () => {
             <Trash2 className="w-4 h-4" />
             Delete Selected Tables ({totalSelectedRecords} records)...
           </button>
+        </div>
+      </div>
+
+      {/* SECTION 4: Application Factory Reset Facility */}
+      <div className="bg-white rounded-lg border border-red-200 shadow-xs p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-red-100">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded bg-red-100 text-red-700">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <h2 className="text-base font-bold text-slate-900">
+                Application Factory Reset Facility
+              </h2>
+              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-800 uppercase tracking-wide">
+                Super Admin Only
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
+              Restore the entire application to its original factory specifications. You can wipe all court records for a clean production start (0 records), reload official sample court decrees and cases, or perform a complete out-of-the-box fresh install that restarts the First-Run Setup Wizard.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={openFactoryResetModal}
+            className="px-5 py-2.5 bg-red-700 hover:bg-red-800 text-white font-bold rounded-lg text-xs transition-colors shadow-xs flex items-center gap-2 cursor-pointer"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Open Factory Reset Facility...
+          </button>
+        </div>
+        <div className="bg-red-50/60 border border-red-200 rounded p-3 text-xs text-red-900 flex items-center gap-2">
+          <AlertOctagon className="w-4 h-4 text-red-600 shrink-0" />
+          <span>
+            Requires typing <strong>"FACTORY RESET"</strong> to confirm execution. An automated downloadable SQLite safety snapshot (.db) is created before resetting.
+          </span>
         </div>
       </div>
 

@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export const ReportsView: React.FC = () => {
-  const { settings, hasPermission } = useApp();
+  const { settings, hasPermission, dataVersion } = useApp();
 
   const [selectedReportId, setSelectedReportId] = useState<number>(1);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(settings.defaultOrientation || 'landscape');
@@ -315,7 +315,7 @@ export const ReportsView: React.FC = () => {
     }
 
     return { title, columns, rows, totalSum };
-  }, [selectedReportId, startDate, endDate, statusFilter, caseFilter, entityFilter, customCols]);
+  }, [selectedReportId, startDate, endDate, statusFilter, caseFilter, entityFilter, customCols, dataVersion]);
 
   const handlePrint = () => {
     window.print();

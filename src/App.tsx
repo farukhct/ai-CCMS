@@ -33,6 +33,7 @@ import { ApplicationFormModal } from './components/forms/ApplicationFormModal';
 import { DonationFormModal } from './components/forms/DonationFormModal';
 import { DisbursementFormModal } from './components/forms/DisbursementFormModal';
 import { PayOrderFormModal } from './components/forms/PayOrderFormModal';
+import { FactoryResetModal } from './components/common/FactoryResetModal';
 import { Scale } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
@@ -43,6 +44,7 @@ const MainLayout: React.FC = () => {
     activeTab,
     appModalId,
     donationModalId,
+    donationApplicationId,
     disbursementModalId,
     disbursementDonationId,
     disbursementPayOrderData,
@@ -140,6 +142,7 @@ const MainLayout: React.FC = () => {
       />
       <DonationFormModal
         recordId={donationModalId}
+        initialApplicationId={donationApplicationId}
         onClose={closeAllModals}
         onSaved={refreshData}
       />
@@ -165,6 +168,7 @@ const MainLayout: React.FC = () => {
       <ConfirmDialog />
       <ToastContainer />
       <LockScreenModal />
+      <FactoryResetModal />
     </div>
   );
 };

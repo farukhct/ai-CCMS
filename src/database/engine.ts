@@ -770,6 +770,122 @@ export function reseedDatabase(): void {
   initialized = true;
 }
 
+export interface FactoryResetOptions {
+  mode: 'clean_slate' | 'sample_data' | 'first_run_setup';
+  preserveCurrentUser?: boolean;
+  currentUserId?: number;
+}
+
+export interface FactoryResetResult {
+  success: boolean;
+  mode: 'clean_slate' | 'sample_data' | 'first_run_setup';
+  message: string;
+  hasUsers: boolean;
+}
+
+/**
+ * Resets the entire application database according to chosen factory mode:
+ * - 'clean_slate': 0 operational records, default settings & roles, admin preserved or re-seeded.
+ * - 'sample_data': Reloads authentic sample court records, default settings, and admin accounts.
+ * - 'first_run_setup': Complete wipe including users, triggering the Initial Setup Wizard.
+ */
+export function factoryResetDatabase(options: FactoryResetOptions): FactoryResetResult {
+  const now = new Date().toISOString();
+
+  if (options.mode === 'first_run_setup') {
+    state = createEmptyState();
+    seedDefaultRoles();
+    seedDefaultSettings();
+    state.tables.Users = [];
+    state.sequences.Users = 0;
+    saveStateToStorage();
+    initialized = true;
+
+    return {
+      success: true,
+      mode: 'first_run_setup',
+      message: 'Application factory reset complete. All judicial records, credentials, and configuration have been reset. The First-Run Setup Wizard is ready.',
+      hasUsers: false
+    };
+  }
+
+  if (options.mode === 'sample_data') {
+    state = createEmptyState();
+    seedDefaultRoles();
+    seedDefaultSettings();
+    seedDefaultAdmin();
+    seedSampleRecords();
+
+    // Initial audit log
+    state.sequences.AuditLogs++;
+    state.tables.AuditLogs.push({
+      id: state.sequences.AuditLogs,
+      timestamp: now,
+      user_id: 1,
+      username: 'admin',
+      action_type: 'SYSTEM_SETUP',
+      entity_name: 'Database',
+      entity_id: null,
+      summary: 'Application factory reset performed: Official sample court cases, decrees, and pay orders reloaded.',
+      ip_address: '127.0.0.1'
+    });
+
+    saveStateToStorage();
+    initialized = true;
+
+    return {
+      success: true,
+      mode: 'sample_data',
+      message: 'Application factory reset complete. Official court sample records and default administrative accounts have been reloaded.',
+      hasUsers: true
+    };
+  }
+
+  // mode === 'clean_slate' (Pure Production Factory Reset)
+  const currentUserObj = (options.preserveCurrentUser && options.currentUserId)
+    ? state?.tables.Users.find(u => u.id === options.currentUserId)
+    : null;
+
+  state = createEmptyState();
+  seedDefaultRoles();
+  seedDefaultSettings();
+
+  if (currentUserObj) {
+    state.sequences.Users++;
+    state.tables.Users.push({
+      ...currentUserObj,
+      id: state.sequences.Users,
+      updated_at: now
+    });
+  } else {
+    seedDefaultAdmin();
+  }
+
+  // Initial audit log
+  state.sequences.AuditLogs++;
+  state.tables.AuditLogs.push({
+    id: state.sequences.AuditLogs,
+    timestamp: now,
+    user_id: currentUserObj?.id || 1,
+    username: currentUserObj?.username || 'admin',
+    action_type: 'SYSTEM_SETUP',
+    entity_name: 'Database',
+    entity_id: null,
+    summary: 'Application factory reset performed: Production database restored to pristine clean slate (0 court records).',
+    ip_address: '127.0.0.1'
+  });
+
+  saveStateToStorage();
+  initialized = true;
+
+  return {
+    success: true,
+    mode: 'clean_slate',
+    message: 'Application factory reset complete. All court records and logs have been cleared. System is in pristine state ready for production entry.',
+    hasUsers: true
+  };
+}
+
 export async function getDatabase(): Promise<any> {
   return ensureState();
 }
@@ -1124,6 +1240,78 @@ export function query<T = any>(sql: string, params: any[] = []): T[] {
     return rows as T[];
   }
 
+  // 7A. Master Joined Ledger Query (AllRecordsView) - Must be before plain FROM Disbursements
+  if (trimmed.includes('FROM Disbursements') && trimmed.includes('LEFT JOIN')) {
+    const joined = s.tables.Disbursements.map(dis => {
+      const don = dis.donation_id ? s.tables.Donations.find(d => d.id === dis.donation_id) : null;
+      const app = don && don.application_id ? s.tables.Applications.find(a => a.id === don.application_id) : null;
+      const po = dis.pay_order_id
+        ? s.tables.PayOrders.find(p => p.id === dis.pay_order_id)
+        : (dis.pay_order_number ? s.tables.PayOrders.find(p => p.pay_order_number === dis.pay_order_number) : null);
+
+      return {
+        dis_id: dis.id,
+        dis_serial: dis.serial_number,
+        case_number: dis.case_number || don?.case_number || po?.case_number || '',
+        entity_name: dis.donation_name || don?.donation_name || po?.donation_name || app?.donation_name || '',
+        dis_amount: dis.donation_amount,
+        receiver_name: dis.receiver_name,
+        receiver_phone: dis.receiver_phone,
+        receiving_date: dis.receiving_date,
+        dis_status: dis.status,
+        po_id: po ? po.id : null,
+        po_serial: po ? po.serial_number : '',
+        pay_order_number: dis.pay_order_number || po?.pay_order_number || '',
+        po_date: dis.po_date || po?.po_date || '',
+        don_id: don ? don.id : null,
+        don_serial: don ? don.serial_number : '',
+        don_amount: don ? don.donation_amount : (po?.donation_amount || null),
+        judgement_date: dis.judgement_date || don?.judgement_date || po?.judgement_date || '',
+        app_id: app ? app.id : null,
+        app_serial: app ? app.serial_number : '',
+        bank_name: dis.bank_name || po?.bank_name || app?.bank_name || '',
+        branch_name: dis.branch_name || po?.branch_name || app?.branch_name || '',
+        bank_account: app ? app.bank_account_number : '',
+        app_date: app ? app.application_date : ''
+      };
+    });
+    joined.sort((a, b) => b.dis_id - a.dis_id);
+    return joined as T[];
+  }
+
+  // 7B. Case-wise Donation & Disbursement Summary (ReportsView) - Must be before plain FROM Donations
+  if (trimmed.includes('FROM Donations') && trimmed.includes('LEFT JOIN')) {
+    const caseMap: Record<string, { case_number: string; entity_name: string; total_decreed: number; total_disbursed: number; balance: number }> = {};
+
+    s.tables.Donations.forEach(don => {
+      const c = don.case_number;
+      if (!c) return;
+      if (!caseMap[c]) {
+        caseMap[c] = {
+          case_number: c,
+          entity_name: don.donation_name,
+          total_decreed: 0,
+          total_disbursed: 0,
+          balance: 0
+        };
+      }
+      caseMap[c].total_decreed += (don.donation_amount || 0);
+    });
+
+    s.tables.Disbursements.forEach(dis => {
+      const c = dis.case_number;
+      if (c && caseMap[c]) {
+        caseMap[c].total_disbursed += (dis.donation_amount || 0);
+      }
+    });
+
+    Object.values(caseMap).forEach(item => {
+      item.balance = item.total_decreed - item.total_disbursed;
+    });
+
+    return Object.values(caseMap) as T[];
+  }
+
   // 7. Donations Queries
   if (trimmed.includes('FROM Donations')) {
     if (trimmed.includes('SELECT MAX(id)')) {
@@ -1267,70 +1455,6 @@ export function query<T = any>(sql: string, params: any[] = []): T[] {
 
     applySortingAndPagination(rows, trimmed, params);
     return rows as T[];
-  }
-
-  // 9. Master Joined Ledger Query (AllRecordsView)
-  if (trimmed.includes('FROM Disbursements dis') && trimmed.includes('LEFT JOIN Donations don')) {
-    const joined = s.tables.Disbursements.map(dis => {
-      const don = dis.donation_id ? s.tables.Donations.find(d => d.id === dis.donation_id) : null;
-      const app = don && don.application_id ? s.tables.Applications.find(a => a.id === don.application_id) : null;
-
-      return {
-        dis_id: dis.id,
-        dis_serial: dis.serial_number,
-        case_number: dis.case_number || don?.case_number || '',
-        entity_name: dis.donation_name || don?.donation_name || app?.donation_name || '',
-        dis_amount: dis.donation_amount,
-        receiver_name: dis.receiver_name,
-        receiver_phone: dis.receiver_phone,
-        receiving_date: dis.receiving_date,
-        dis_status: dis.status,
-        don_id: don ? don.id : null,
-        don_serial: don ? don.serial_number : '',
-        don_amount: don ? don.donation_amount : null,
-        judgement_date: don ? don.judgement_date : '',
-        app_id: app ? app.id : null,
-        app_serial: app ? app.serial_number : '',
-        bank_name: app ? app.bank_name : '',
-        bank_account: app ? app.bank_account_number : '',
-        app_date: app ? app.application_date : ''
-      };
-    });
-    joined.sort((a, b) => b.dis_id - a.dis_id);
-    return joined as T[];
-  }
-
-  // 10. Case-wise Donation & Disbursement Summary (ReportsView)
-  if (trimmed.includes('FROM Donations d') && trimmed.includes('LEFT JOIN')) {
-    const caseMap: Record<string, { case_number: string; entity_name: string; total_decreed: number; total_disbursed: number; balance: number }> = {};
-
-    s.tables.Donations.forEach(don => {
-      const c = don.case_number;
-      if (!c) return;
-      if (!caseMap[c]) {
-        caseMap[c] = {
-          case_number: c,
-          entity_name: don.donation_name,
-          total_decreed: 0,
-          total_disbursed: 0,
-          balance: 0
-        };
-      }
-      caseMap[c].total_decreed += (don.donation_amount || 0);
-    });
-
-    s.tables.Disbursements.forEach(dis => {
-      const c = dis.case_number;
-      if (c && caseMap[c]) {
-        caseMap[c].total_disbursed += (dis.donation_amount || 0);
-      }
-    });
-
-    Object.values(caseMap).forEach(item => {
-      item.balance = item.total_decreed - item.total_disbursed;
-    });
-
-    return Object.values(caseMap) as T[];
   }
 
   // PRAGMA Integrity check
@@ -1878,6 +2002,24 @@ export async function importDatabaseBinary(binaryData: Uint8Array): Promise<{ su
     if (!parsed.tables || !parsed.tables.Users || !parsed.tables.Applications) {
       return { success: false, message: 'Invalid database file: Missing CCMS tables.' };
     }
+
+    // Ensure all tables exist in imported state
+    if (!parsed.tables.PayOrders) parsed.tables.PayOrders = [];
+    if (!parsed.tables.Donations) parsed.tables.Donations = [];
+    if (!parsed.tables.Disbursements) parsed.tables.Disbursements = [];
+    if (!parsed.tables.AuditLogs) parsed.tables.AuditLogs = [];
+    if (!parsed.tables.AppSettings) parsed.tables.AppSettings = [];
+    if (!parsed.tables.ImportJobs) parsed.tables.ImportJobs = [];
+    if (!parsed.tables.Roles) parsed.tables.Roles = [];
+
+    // Ensure sequences exist and reflect highest ID
+    if (!parsed.sequences) parsed.sequences = {};
+    const tableKeys = ['Users', 'Roles', 'Applications', 'Donations', 'Disbursements', 'PayOrders', 'AuditLogs', 'AppSettings', 'ImportJobs'];
+    tableKeys.forEach(t => {
+      const arr = (parsed.tables as any)[t] || [];
+      const maxId = arr.reduce((m: number, it: any) => Math.max(m, it.id || 0), 0);
+      parsed.sequences[t] = Math.max(parsed.sequences[t] || 0, maxId);
+    });
 
     state = parsed;
     initialized = true;

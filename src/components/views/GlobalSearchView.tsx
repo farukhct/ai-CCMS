@@ -23,7 +23,8 @@ export const GlobalSearchView: React.FC = () => {
     openApplicationModal,
     openDonationModal,
     openDisbursementModal,
-    openPayOrderModal
+    openPayOrderModal,
+    dataVersion
   } = useApp();
 
   // Search filter criteria
@@ -255,7 +256,7 @@ export const GlobalSearchView: React.FC = () => {
           case_number: r.case_number,
           name: `${r.pay_order_number ? `PO: ${r.pay_order_number}` : 'Pay Order'} (${r.donation_name || 'No Entity'})`,
           details: `${r.bank_name || ''} ${r.branch_name ? `(${r.branch_name})` : ''}`,
-          amount: null,
+          amount: r.donation_amount || null,
           date: r.po_date,
           status: 'Active',
           remarks: r.remarks,
@@ -265,7 +266,7 @@ export const GlobalSearchView: React.FC = () => {
     }
 
     return list;
-  }, [keyword, moduleFilter, caseNumber, status, startDate, endDate, minAmount, maxAmount]);
+  }, [keyword, moduleFilter, caseNumber, status, startDate, endDate, minAmount, maxAmount, dataVersion]);
 
   // Paginated slice
   const paginatedResults = useMemo(() => {

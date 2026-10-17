@@ -16,12 +16,14 @@ import {
   Edit2,
   Trash2,
   X,
-  FileDown
+  FileDown,
+  Coins
 } from 'lucide-react';
 
 export const ApplicationEntryView: React.FC = () => {
   const {
     openApplicationModal,
+    openDonationModal,
     showConfirm,
     addToast,
     hasPermission,
@@ -324,7 +326,15 @@ export const ApplicationEntryView: React.FC = () => {
                       {rec.remarks || '-'}
                     </td>
                     <td className="py-2 px-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openDonationModal(undefined, rec.id)}
+                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                          title={`Create Donation Decree for "${rec.donation_name || 'App #' + rec.id}" (Auto-populates Donation Name)`}
+                        >
+                          <Coins className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Decree Donation</span>
+                        </button>
                         {hasPermission('edit_records') && (
                           <button
                             onClick={() => openApplicationModal(rec.id)}
